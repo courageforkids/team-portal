@@ -11,6 +11,7 @@ export function MobileNav({ role, canReview, badges, orgName }: { role: "admin" 
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   useEffect(() => setOpen(false), [pathname]);
+  useEffect(() => { try { sessionStorage.removeItem("cfk-reloaded"); } catch {} }, []);
   useEffect(() => { document.body.style.overflow = open ? "hidden" : ""; }, [open]);
   const tabs = [
     { href: "/", label: "Home", icon: Home },

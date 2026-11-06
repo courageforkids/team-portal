@@ -46,8 +46,11 @@ export function ActionForm({
       onSubmit={(e) => {
         e.preventDefault();
         if (pending) return;
-        const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLElement | null;
-        const fd = new FormData(e.currentTarget, submitter && "form" in submitter ? (submitter as HTMLButtonElement) : undefined);
+        const form = e.currentTarget;
+        const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+        // Build the form data without relying on FormData(form, submitter), which older iPhones don't support.
+        const fd = new FormData(form);
+        if (submitter?.name) fd.append(submitter.name, submitter.value);
         startTransition(() => formAction(fd));
       }}>
       <PendingCtx.Provider value={pending}>{typeof children === "function" ? children(state) : children}</PendingCtx.Provider>
