@@ -26,8 +26,13 @@ async function main() {
   const password = process.env.ADMIN_PASSWORD ?? "";
   if (email && name) {
     const exists = (await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1))[0];
-    if (exists) console.log("[deploy-setup] Admin already exists — leaving it unchanged.");
-    else if (passwordProblem(password)) console.log(`[deploy-setup] ADMIN_PASSWORD rejected: ${passwordProblem(password)}`);
+    const reset = (process.env.ADMIN_PASSWORD_RESET ?? "").toLowerCase() === "yes";
+    if (passwordProblem(password)) console.log(`[deploy-setup] ADMIN_PASSWORD rejected: ${passwordProblem(password)}`);
+    else if (exists && reset) {
+      await db.update(users).set({ passwordHash: await hashPassword(password), role: "admin", status: "active", updatedAt: new Date() }).where(eq(users.id, exists.id));
+      console.log(`[deploy-setup] Reset the password for administrator ${email}. Remove ADMIN_PASSWORD_RESET now.`);
+    }
+    else if (exists) console.log("[deploy-setup] Admin already exists — leaving it unchanged (set ADMIN_PASSWORD_RESET=yes to reset its password).");
     else {
       const exec = (await db.select().from(departments).where(eq(departments.slug, "executive")))[0];
       await db.insert(users).values({ email, name, role: "admin", title: "Founder & Executive Director", departmentId: exec?.id, passwordHash: await hashPassword(password) });
