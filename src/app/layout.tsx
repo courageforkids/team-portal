@@ -9,6 +9,7 @@ export const metadata: Metadata = {
   title: { default: "Courage for Kids | Team Portal", template: "%s · Courage for Kids" },
   description: "Internal team portal for Courage for Kids.",
   robots: { index: false, follow: false },
+  appleWebApp: { capable: true, title: "CFK Portal", statusBarStyle: "default" },
 };
 export const viewport: Viewport = {
   themeColor: [{ media: "(prefers-color-scheme: light)", color: "#f7f7f5" }, { media: "(prefers-color-scheme: dark)", color: "#0d1117" }],
