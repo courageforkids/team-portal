@@ -17,6 +17,8 @@ import { ButtonLink } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { TaskCard, DueChip } from "@/components/tasks/task-bits";
 import { WelcomeCard } from "@/components/home/welcome-card";
+import { PushPrompt } from "@/components/home/push-toggle";
+import { vapidPublicKey } from "@/server/push";
 import { ago, DEFAULT_TZ, fmtDate, fmtDateTime } from "@/lib/dates";
 import { isOverdue, OPEN_FOR_ASSIGNEE, PRIORITY_RANK } from "@/lib/task-meta";
 import { cn } from "@/lib/cn";
@@ -101,6 +103,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       </section>
 
       {!me.onboardedAt && <WelcomeCard name={firstName} role={me.role} />}
+      {vapidPublicKey() && <PushPrompt publicKey={vapidPublicKey()!} />}
 
       {needsAck.length > 0 && (
         <Link href={`/announcements/${needsAck[0].a.id}`} className="focus-ring flex items-center gap-3 rounded-xl border border-accent/60 bg-accent-soft px-4 py-3 text-sm transition hover:brightness-[.98]">

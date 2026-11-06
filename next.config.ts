@@ -14,6 +14,11 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   devIndicators: false,
   experimental: { serverActions: { bodySizeLimit: "60mb" } },
-  async headers() { return [{ source: "/:path*", headers: securityHeaders }]; },
+  async headers() {
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      { source: "/sw.js", headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }, { key: "Service-Worker-Allowed", value: "/" }] },
+    ];
+  },
 };
 export default nextConfig;

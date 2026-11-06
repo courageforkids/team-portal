@@ -61,7 +61,7 @@ export function PrefsForm({ prefs, emailEnabled }: { prefs: Prefs; emailEnabled:
   return (
     <ActionForm action={updatePrefsAction} className="space-y-5">
       <fieldset>
-        <legend className="eyebrow mb-2">In the portal</legend>
+        <legend className="eyebrow mb-2">In the portal and on your phone</legend>
         <Checkbox name="announcements" defaultChecked={p.announcements} label="New announcements" />
         <Checkbox name="deadlineReminders" defaultChecked={p.deadlineReminders} label="Deadline reminders" description="A heads-up before something is due." />
       </fieldset>

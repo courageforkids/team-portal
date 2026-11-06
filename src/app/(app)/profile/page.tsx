@@ -10,6 +10,8 @@ import { AvatarForm, PasswordForm, PrefsForm, ProfileForm } from "@/components/h
 import { CalendarFeedCard } from "@/components/calendar/feed-card";
 import { ROLE_LABEL } from "@/lib/task-meta";
 import { appUrl } from "@/server/email";
+import { vapidPublicKey } from "@/server/push";
+import { PushToggle } from "@/components/home/push-toggle";
 
 export const metadata = { title: "Profile & preferences" };
 
@@ -39,7 +41,7 @@ export default async function ProfilePage() {
           </Card>
           <Card id="notifications">
             <CardHeader title="Notifications" description="Important updates (new assignments, reviews, deadline changes) always appear in the portal." />
-            <div className="px-5 pb-5"><PrefsForm emailEnabled={s.emailEnabled} prefs={{
+            <div className="space-y-5 px-5 pb-5">{vapidPublicKey() && <PushToggle publicKey={vapidPublicKey()!} />}<PrefsForm emailEnabled={s.emailEnabled} prefs={{
               announcements: p.announcements !== false, deadlineReminders: p.deadlineReminders !== false,
               emailAssignments: p.emailAssignments ?? true, emailReminders: p.emailReminders ?? true, emailAnnouncements: p.emailAnnouncements ?? false, emailReviews: p.emailReviews ?? true,
             }} /></div>

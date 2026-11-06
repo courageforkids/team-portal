@@ -3,6 +3,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { notifications, users, type NotificationPrefs } from "@/db/schema";
 import { appUrl, sendEmail } from "./email";
+import { sendPush } from "./push";
 
 export type NotifyType =
   | "task_assigned" | "deadline_soon" | "deadline_changed" | "submission_approved" | "revision_requested"
@@ -47,6 +48,7 @@ export async function notify(
       .returning({ id: notifications.id });
     if (!inserted.length) continue; // duplicate suppressed
     created++;
+    await sendPush(r.id, { title: n.title, body: n.body, href: n.href, tag: n.dedupeKey });
     const emailKey = EMAIL_PREF[n.type];
     if (emailKey && (prefs[emailKey] ?? EMAIL_DEFAULTS[emailKey])) {
       await sendEmail(r.email, n.title, `${n.body ?? ""}\n\n${n.href ? appUrl(n.href) : appUrl("/")}\n\n— Courage for Kids Team Portal`);

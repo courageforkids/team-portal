@@ -37,6 +37,12 @@
 8. **Reminders:** in GitHub → Settings → Secrets → Actions, add `PORTAL_URL` and `CRON_SECRET`. The workflow then runs every 30 minutes.
 9. Sign in, then go to **Settings → Invitations** and invite the team. Each invite link is shown for you to copy and text or email yourself until email is turned on.
 
+## Phone notifications
+1. Run `npx web-push generate-vapid-keys` once.
+2. Add `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` to the host's environment variables, then redeploy.
+3. Each member taps **Turn on notifications** (on Home or in Profile). On iPhone, they must first add the portal to the Home Screen (iOS 16.4 or newer).
+Alerts follow each member's notification preferences. Expired devices are removed automatically. If the keys are missing, the feature stays hidden.
+
 ## Turning on email (optional, needs approval)
 1. Create a Resend account and add the domain `teamcourageforkids.org`. Resend shows 3 DNS records (SPF/DKIM); add them in Wix DNS.
 2. Put `RESEND_API_KEY` in the host's environment variables and redeploy.

@@ -15,4 +15,4 @@ export function middleware(req: NextRequest) {
   }
   return NextResponse.next();
 }
-export const config = { matcher: ["/((?!_next/static|_next/image|icon.png|apple-icon.png|logo.png|robots.txt|manifest.webmanifest).*)"] };
+export const config = { matcher: ["/((?!_next/static|_next/image|icon.png|apple-icon.png|logo.png|robots.txt|manifest.webmanifest|sw.js).*)"] };
