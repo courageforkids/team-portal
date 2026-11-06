@@ -6,7 +6,8 @@ import { getSettings } from "@/server/settings";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { AvatarForm, PasswordForm, PrefsForm, ProfileForm } from "@/components/home/profile-forms";
+import { PasswordForm, PrefsForm, ProfileForm } from "@/components/home/profile-forms";
+import { AvatarEditor } from "@/components/home/avatar-editor";
 import { CalendarFeedCard } from "@/components/calendar/feed-card";
 import { ROLE_LABEL } from "@/lib/task-meta";
 import { appUrl } from "@/server/email";
@@ -32,7 +33,7 @@ export default async function ProfilePage() {
           <Card>
             <CardHeader title="Your profile" description="Your title, department and responsibilities are set by an administrator." />
             <div className="space-y-5 px-5 pb-5">
-              <AvatarForm name={u.name} fileId={u.avatarFileId} />
+              <AvatarEditor name={u.name} fileId={u.avatarFileId} />
               <div className="flex flex-wrap gap-2 text-sm">
                 <Badge tone="brand">{ROLE_LABEL[u.role]}</Badge>{u.title && <Badge tone="neutral">{u.title}</Badge>}{dept && <Badge tone="neutral">{dept.name}</Badge>}
               </div>
