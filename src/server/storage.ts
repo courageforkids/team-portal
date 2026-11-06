@@ -117,7 +117,11 @@ export async function storePrepared(prepared: PreparedUpload[], owner: { type: O
   const rows = [];
   for (const { name, size, mime, buf } of prepared) {
     const key = `${owner.type}/${new Date().toISOString().slice(0, 7)}/${randomUUID()}`;
-    await driver().put(key, buf, mime);
+    try { await driver().put(key, buf, mime); }
+    catch (e) {
+      console.error("[storage] upload failed", (e as Error)?.name, (e as Error)?.message);
+      throw new UploadError("The file couldn't be saved to storage. Please try again — if it keeps happening, tell an administrator (storage settings may need a fix).");
+    }
     const [row] = await db.insert(files).values({
       storageKey: key, filename: sanitizeFilename(name), mimeType: mime, size, uploadedById, ownerType: owner.type, ownerId: owner.id,
     }).returning();

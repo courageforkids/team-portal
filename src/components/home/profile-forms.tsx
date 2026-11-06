@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toaster";
 import { changePasswordAction, removeAvatarAction, updateAvatarAction, updatePrefsAction, updateProfileAction } from "@/server/profile-actions";
 import { TIMEZONES } from "@/lib/dates";
+import { compressImage, setInputFiles } from "@/lib/compress-image";
 
 export function AvatarForm({ name, fileId }: { name: string; fileId: string | null }) {
   const [, start] = useTransition();
@@ -21,8 +22,13 @@ export function AvatarForm({ name, fileId }: { name: string; fileId: string | nu
           <div className="flex flex-wrap gap-2">
             <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-[10px] border border-line-strong bg-surface px-3 text-sm font-semibold hover:bg-surface-2">
               <Camera className="h-4 w-4" />{fileId ? "Change photo" : "Add photo"}
-              <input type="file" name="avatar" accept="image/png,image/jpeg,image/webp,image/gif" className="sr-only"
-                onChange={(e) => { if (e.target.files?.length) e.currentTarget.form?.requestSubmit(); }} />
+              <input type="file" name="avatar" accept="image/*" className="sr-only"
+                onChange={async (e) => {
+                  const input = e.currentTarget; const f = input.files?.[0]; if (!f) return;
+                  const small = await compressImage(f, 512, 0.85, 0);
+                  setInputFiles(input, [small]);
+                  input.form?.requestSubmit();
+                }} />
             </label>
             {fileId && <Button type="button" variant="ghost" size="sm" className="h-9" onClick={() => start(async () => { const r = await removeAvatarAction(); toast.push(r.ok ? "success" : "error", r.ok ? r.message ?? "" : r.error); router.refresh(); })}><Trash2 className="h-4 w-4" />Remove</Button>}
           </div>

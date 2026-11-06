@@ -14,6 +14,7 @@ import {
 } from "@/server/task-actions";
 import type { SubmissionType, ChecklistItem } from "@/db/schema";
 import type { TaskStatus } from "@/lib/task-meta";
+import { compressImage, setInputFiles, UPLOAD_BUDGET_BYTES } from "@/lib/compress-image";
 
 /* ───────── Submission form (assignee) ───────── */
 
@@ -23,13 +24,11 @@ export function SubmitPanel({ taskId, types, checklist, requiresReview, isRevisi
   taskId: string; types: SubmissionType[]; checklist: ChecklistItem[]; requiresReview: boolean; isRevision: boolean; accept: string;
 }) {
   const [picked, setPicked] = useState<File[]>([]);
+  const [shrinking, setShrinking] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const syncInput = (list: File[]) => {
-    const dt = new DataTransfer();
-    list.forEach((f) => dt.items.add(f));
-    if (inputRef.current) inputRef.current.files = dt.files;
-    setPicked(list);
-  };
+  const syncInput = (list: File[]) => { setInputFiles(inputRef.current, list); setPicked(list); };
+  const total = picked.reduce((n, f) => n + f.size, 0);
+  const tooBig = total > UPLOAD_BUDGET_BYTES;
   const needs = (t: SubmissionType) => types.includes(t);
   return (
     <ActionForm action={submitAction} onSuccess={() => setPicked([])} resetOnSuccess className="space-y-5">
@@ -56,10 +55,16 @@ export function SubmitPanel({ taskId, types, checklist, requiresReview, isRevisi
           <label htmlFor="files" className="flex min-h-[96px] cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-line-strong bg-surface-2/50 px-4 py-5 text-center transition hover:border-brand/50 hover:bg-brand-soft/50">
             <FileUp className="h-6 w-6 text-brand-ink" aria-hidden />
             <span className="text-sm font-semibold">Choose files or take a photo</span>
-            <span className="text-xs text-muted">Images, PDF, Office files, video · up to 25 MB each</span>
+            <span className="text-xs text-muted">Photos, PDFs, Office files · photos are shrunk automatically</span>
           </label>
           <input ref={inputRef} id="files" name="files" type="file" multiple accept={accept} className="sr-only"
-            onChange={(e) => setPicked(Array.from(e.target.files ?? []))} />
+            onChange={async (e) => {
+              const list = Array.from(e.target.files ?? []);
+              setShrinking(true);
+              const small = await Promise.all(list.map((f) => compressImage(f)));
+              setShrinking(false);
+              syncInput(small);
+            }} />
           {picked.length > 0 && (
             <ul className="mt-2 space-y-1">
               {picked.map((f, i) => (
@@ -70,6 +75,8 @@ export function SubmitPanel({ taskId, types, checklist, requiresReview, isRevisi
               ))}
             </ul>
           )}
+          {shrinking && <p className="hint">Preparing photos…</p>}
+          {tooBig && <p role="alert" className="mt-2 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">These files add up to {fmtSize(total)}, over the 4 MB limit for one submission. Photos are shrunk automatically; for videos or big files, upload them to Google Drive and paste the link instead.</p>}
           {isRevision && needs("file") && <p className="hint">Your earlier files are kept in the history. Upload updated versions here.</p>}
         </div>
       )}
@@ -79,7 +86,7 @@ export function SubmitPanel({ taskId, types, checklist, requiresReview, isRevisi
         </Field>
       )}
       <Field label="Note for your reviewer" htmlFor="note" hint="Optional"><Input id="note" name="note" placeholder="Anything they should know?" /></Field>
-      <SubmitButton size="lg" className="w-full sm:w-auto" pendingText="Submitting…">
+      <SubmitButton size="lg" className="w-full sm:w-auto" pendingText="Submitting…" disabled={tooBig || shrinking}>
         <Send className="h-4 w-4" />{requiresReview ? (isRevision ? "Submit revision for review" : "Submit for review") : "Submit & complete"}
       </SubmitButton>
     </ActionForm>
