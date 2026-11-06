@@ -8,17 +8,26 @@ import { db } from "@/db";
 import { pushSubscriptions } from "@/db/schema";
 
 /** Phone/desktop notifications. Inactive unless VAPID keys are configured on the server. */
+/** Reads a key in any letter case and tolerates "NAME=value" or quotes pasted into the value. */
+function envKey(name: string) {
+  const raw = process.env[name] ?? process.env[name.toLowerCase()] ?? "";
+  const v = raw.trim().replace(/^[A-Za-z_]+=/, "").replace(/^["']|["']$/g, "").trim();
+  return v || null;
+}
+const PUBLIC = () => envKey("VAPID_PUBLIC_KEY");
+const PRIVATE = () => envKey("VAPID_PRIVATE_KEY");
+
 export function pushConfigured() {
-  return !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
+  return !!(PUBLIC() && PRIVATE());
 }
 export function vapidPublicKey() {
-  return process.env.VAPID_PUBLIC_KEY ?? null;
+  return pushConfigured() ? PUBLIC() : null;
 }
 
 let ready = false;
 function setup() {
   if (ready || !pushConfigured()) return pushConfigured();
-  webpush.setVapidDetails(process.env.VAPID_SUBJECT || "mailto:courageforkids.org@gmail.com", process.env.VAPID_PUBLIC_KEY!, process.env.VAPID_PRIVATE_KEY!);
+  webpush.setVapidDetails(process.env.VAPID_SUBJECT || "mailto:courageforkids.org@gmail.com", PUBLIC()!, PRIVATE()!);
   ready = true;
   return true;
 }
