@@ -15,7 +15,7 @@ type Person = { id: string; name: string; title: string; avatarFileId: string | 
 export type TaskFormValues = {
   id?: string; title: string; instructions: string; assignees: string[]; departmentId: string; categoryId: string; projectId: string;
   priority: string; dueAt: string; timezone: string; deliverables: string; completionCriteria: string; submissionTypes: SubmissionType[];
-  checklist: string; links: string; requiresReview: boolean; reviewerId: string; internalNotes: string;
+  checklist: string; links: string; requiresReview: boolean; reviewerId: string; internalNotes: string; workGroupId?: string;
 };
 
 const TYPES: { key: SubmissionType; label: string; desc: string }[] = [
@@ -25,10 +25,13 @@ const TYPES: { key: SubmissionType; label: string; desc: string }[] = [
   { key: "checklist", label: "Checklist", desc: "Check off each step" },
 ];
 
-export function TaskForm({ mode, values, people, departments, categories, projects, reviewers }: {
+export function TaskForm({ mode, values, people, departments, categories, projects, reviewers, workGroups = [], meId }: {
   mode: "create" | "edit"; values: TaskFormValues; people: Person[]; departments: Opt[]; categories: Opt[]; projects: Opt[]; reviewers: Opt[];
+  workGroups?: { id: string; name: string; memberIds: string[] }[]; meId?: string;
 }) {
-  const [assignees, setAssignees] = useState<string[]>(values.assignees);
+  const [group, setGroup] = useState(values.workGroupId ?? "");
+  const groupMembers = (id: string) => (workGroups.find((g) => g.id === id)?.memberIds ?? []).filter((x) => x !== meId);
+  const [assignees, setAssignees] = useState<string[]>(values.workGroupId && !values.assignees.length ? groupMembers(values.workGroupId) : values.assignees);
   const [filter, setFilter] = useState("");
   const [types, setTypes] = useState<SubmissionType[]>(values.submissionTypes);
   const [review, setReview] = useState(values.requiresReview);
@@ -89,6 +92,16 @@ export function TaskForm({ mode, values, people, departments, categories, projec
             <h2 className="font-semibold">Assign to <span className="text-bad">*</span></h2>
             <span className="text-xs text-muted">{assignees.length} selected</span>
           </div>
+          {workGroups.length > 0 && (
+            <div className="mb-3">
+              <label htmlFor="workGroupId" className="label">Work pair or group</label>
+              <Select id="workGroupId" name="workGroupId" value={group} onChange={(e) => { setGroup(e.target.value); if (e.target.value) setAssignees(groupMembers(e.target.value)); }}>
+                <option value="">None — pick people below</option>
+                {workGroups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+              </Select>
+              {group && <p className="hint">One shared task for the group. It's posted in their group chat.</p>}
+            </div>
+          )}
           <div className="relative mb-2">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" aria-hidden />
             <input className="input h-9 pl-9 text-sm" placeholder="Find a person" aria-label="Find a person" value={filter} onChange={(e) => setFilter(e.target.value)} />
@@ -102,7 +115,7 @@ export function TaskForm({ mode, values, people, departments, categories, projec
               </label>
             ))}
           </div>
-          {mode === "create" && assignees.length > 1 && repeat === "none" && (
+          {mode === "create" && assignees.length > 1 && repeat === "none" && !group && (
             <div className="mt-3 rounded-lg bg-surface-2 p-3">
               <Checkbox name="separate" defaultChecked label="Give each person their own copy" description="Each person submits separately. Turn off for one shared task." />
             </div>

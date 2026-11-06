@@ -89,6 +89,13 @@ export async function canViewFile(u: CurrentUser | null, fileId: string) {
       ok = !!r && visibilityAllowed(u.role, r.visibility); break;
     }
     case "project": ok = u.role === "leader"; break;
+    case "message": {
+      const { messages, conversationMembers } = await import("@/db/schema");
+      const m = f.ownerId ? (await db.select({ c: messages.conversationId }).from(messages).where(eq(messages.id, f.ownerId)).limit(1))[0] : null;
+      ok = !!m && !!(await db.select({ x: conversationMembers.userId }).from(conversationMembers)
+        .where(and(eq(conversationMembers.conversationId, m.c), eq(conversationMembers.userId, u.id))).limit(1))[0];
+      break;
+    }
   }
   return ok ? { ok: true as const, file: f } : { ok: false as const };
 }

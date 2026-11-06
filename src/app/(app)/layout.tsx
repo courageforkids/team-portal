@@ -8,6 +8,7 @@ import { Brand, NavList } from "@/components/shell/sidebar";
 import { MobileNav } from "@/components/shell/mobile-nav";
 import { UserMenu } from "@/components/shell/user-menu";
 import { NotificationBell } from "@/components/shell/notification-bell";
+import { unreadMessageTotal } from "@/server/chat";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
@@ -20,7 +21,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const [pendingReviews] = await db.select({ n: count() }).from(tasks).where(reviewWhere);
   const [isReviewer] = user.role === "admin" ? [{ n: 1 }] : await db.select({ n: count() }).from(tasks).where(eq(tasks.reviewerId, user.id));
   const canReview = user.role !== "volunteer" && isReviewer.n > 0;
-  const badges = { notifications: unread.n, reviews: pendingReviews.n };
+  const badges = { notifications: unread.n, reviews: pendingReviews.n, messages: await unreadMessageTotal(user.id) };
 
   return (
     <div className="min-h-dvh">

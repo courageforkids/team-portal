@@ -8,7 +8,7 @@ import { sendPush } from "./push";
 export type NotifyType =
   | "task_assigned" | "deadline_soon" | "deadline_changed" | "submission_approved" | "revision_requested"
   | "announcement" | "task_submitted" | "deadline_missed" | "extension_requested" | "extension_decided"
-  | "task_blocked" | "task_comment" | "task_updated";
+  | "task_blocked" | "task_comment" | "task_updated" | "chat_report";
 
 /** Nonessential types members can switch off (in-app). Everything else is always delivered in-app. */
 const OPTIONAL_INAPP: Partial<Record<NotifyType, keyof NotificationPrefs>> = {

@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { db } from "@/db";
 import {
-  departments, extensionRequests, files, projects, reviews, submissions, taskAssignees, taskCategories, taskComments, taskEvents, tasks, users,
+  conversations, departments, extensionRequests, files, projects, reviews, submissions, taskAssignees, taskCategories, taskComments, taskEvents, tasks, users,
 } from "@/db/schema";
 import { requireUser } from "@/server/auth";
 import { taskAccess } from "@/server/policy";
@@ -83,6 +83,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
   const people = new Map(peopleRows.map((p) => [p.id, p]));
   const subFiles = subs.length ? await db.select().from(files).where(and(eq(files.ownerType, "submission"), inArray(files.ownerId, subs.map((s) => s.id)))) : [];
   const reviewer = task.reviewerId ? people.get(task.reviewerId) : null;
+  const workGroup = task.workGroupId ? (await db.select({ id: conversations.id, title: conversations.title }).from(conversations).where(eq(conversations.id, task.workGroupId)).limit(1))[0] : null;
   const creator = task.createdById ? people.get(task.createdById) : null;
   const latestReview = revs.at(-1);
   const status = task.status;
@@ -258,6 +259,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
               <div><dt className="eyebrow mb-1.5">Assigned to</dt><dd className="space-y-2">{assignees.map((a) => <div key={a.id} className="flex items-center gap-2"><Avatar name={a.name} fileId={a.avatarFileId} size={26} /><span className="font-medium">{a.name}</span></div>)}</dd></div>
               <div><dt className="eyebrow mb-1">Due</dt><dd className={cn(overdue && "text-warn")}>{task.dueAt ? fmtFull(task.dueAt, tz) : "No due date"}</dd>
                 {task.originalDueAt && task.dueAt && task.originalDueAt.getTime() !== task.dueAt.getTime() && <dd className="text-xs text-muted">Originally {fmtDateTime(task.originalDueAt, tz)}</dd>}</div>
+              {workGroup && <div><dt className="eyebrow mb-1">Work group</dt><dd><Link href={`/messages/${workGroup.id}`} className="font-medium text-brand-ink hover:underline">{workGroup.title} · open group chat</Link></dd></div>}
               {task.requiresReview && <div><dt className="eyebrow mb-1">Reviewer</dt><dd>{reviewer?.name ?? "Any administrator"}</dd></div>}
               {t.dept && <div><dt className="eyebrow mb-1">Department</dt><dd className="flex items-center gap-2"><span className="h-2 w-2 rounded-full" style={{ background: t.dept.color }} />{t.dept.name}</dd></div>}
               {t.project && <div><dt className="eyebrow mb-1">Project</dt><dd>{me.role === "volunteer" ? t.project.name : <Link href={`/projects/${t.project.id}`} className="font-medium text-brand-ink hover:underline">{t.project.name}</Link>}</dd></div>}

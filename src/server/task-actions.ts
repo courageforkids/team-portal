@@ -52,6 +52,7 @@ function readTaskForm(fd: FormData): { input: TaskInput; assignees: string[] } {
       dueAt, timezone: tz, deliverables: str(fd, "deliverables").slice(0, 4000), completionCriteria: str(fd, "completionCriteria").slice(0, 4000),
       submissionTypes: types, checklist, links: parseLinks(str(fd, "links")), requiresReview, reviewerId: requiresReview ? optUuid(optStr(fd, "reviewerId")) : null,
       internalNotes: str(fd, "internalNotes").slice(0, 4000),
+      workGroupId: optUuid(optStr(fd, "workGroupId")),
     },
     assignees: all(fd, "assignees").filter((x) => uuid.safeParse(x).success),
   };
@@ -80,7 +81,21 @@ export async function createTaskAction(_: unknown, fd: FormData): Promise<Action
       await audit(me.id, "series.create", "task_series", series.id, { title: input.title, repeat });
       return { ok: true, message: `Recurring task created and assigned to ${assignees.length} ${assignees.length === 1 ? "person" : "people"}.`, redirectTo: "/tasks/all" };
     }
-    const ids = await createTasks(me, input, assignees, { separate: bool(fd, "separate") });
+    let separate = bool(fd, "separate");
+    if (input.workGroupId) {
+      // A work-group task is one shared task for everyone in the group, announced in the group's chat.
+      const { conversationMembers, conversations } = await import("@/db/schema");
+      const g = (await db.select().from(conversations).where(eq(conversations.id, input.workGroupId)).limit(1))[0];
+      if (!g || g.kind !== "workgroup") throw new UserError("That work group no longer exists.");
+      const groupIds = (await db.select({ id: conversationMembers.userId }).from(conversationMembers).where(eq(conversationMembers.conversationId, g.id))).map((r) => r.id).filter((x) => x !== me.id || assignees.includes(me.id));
+      assignees.splice(0, assignees.length, ...new Set([...assignees, ...groupIds]));
+      separate = false;
+    }
+    const ids = await createTasks(me, input, assignees, { separate });
+    if (input.workGroupId) {
+      const { addSystemMessage } = await import("./chat");
+      await addSystemMessage(input.workGroupId, `New task for this group: “${input.title}”`);
+    }
     const uploads = filesOf(fd, "attachments");
     if (uploads.length) for (const id of ids) await saveUploads(uploads, { type: "task", id }, me.id);
     return { ok: true, message: ids.length > 1 ? `Created ${ids.length} tasks — one for each person.` : "Task created and assigned.", redirectTo: ids.length === 1 ? `/tasks/${ids[0]}` : "/tasks/all" };

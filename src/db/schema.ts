@@ -206,6 +206,8 @@ export const tasks = pgTable("tasks", {
   reviewerId: uuid("reviewer_id").references(() => users.id, { onDelete: "set null" }),
   internalNotes: text("internal_notes").notNull().default(""), // admin + reviewer only
   seriesId: uuid("series_id").references(() => taskSeries.id, { onDelete: "set null" }),
+  /** Set when the task was assigned to a work pair/group (a "workgroup" conversation). */
+  workGroupId: uuid("work_group_id"),
   createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
   firstSubmittedAt: timestamp("first_submitted_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
@@ -428,3 +430,42 @@ export const pushSubscriptions = pgTable("push_subscriptions", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
 }, (t) => [index("push_user_idx").on(t.userId)]);
+
+/* ───────────── Chat ───────────── */
+
+export const conversationKindEnum = pgEnum("conversation_kind", ["team", "dm", "group", "workgroup"]);
+
+export const conversations = pgTable("conversations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  kind: conversationKindEnum("kind").notNull(),
+  title: text("title"),
+  description: text("description").notNull().default(""),
+  /** For DMs: the two user ids sorted and joined, so each pair has exactly one DM. */
+  dmKey: text("dm_key").unique(),
+  createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+  archived: boolean("archived").notNull().default(false),
+  lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("conversations_last_idx").on(t.lastMessageAt)]);
+
+export const conversationMembers = pgTable("conversation_members", {
+  conversationId: uuid("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  lastReadAt: timestamp("last_read_at", { withTimezone: true }),
+  lastPushAt: timestamp("last_push_at", { withTimezone: true }),
+  muted: boolean("muted").notNull().default(false),
+  joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.conversationId, t.userId] }), index("conversation_members_user_idx").on(t.userId)]);
+
+export const messages = pgTable("messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  conversationId: uuid("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  authorId: uuid("author_id").references(() => users.id, { onDelete: "set null" }),
+  body: text("body").notNull().default(""),
+  /** System lines like "Jacob added Julia". */
+  system: boolean("system").notNull().default(false),
+  editedAt: timestamp("edited_at", { withTimezone: true }),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  deletedById: uuid("deleted_by_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("messages_conv_created_idx").on(t.conversationId, t.createdAt)]);

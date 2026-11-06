@@ -94,7 +94,7 @@ function s3Driver(): Driver {
 let _driver: Driver | null = null;
 const driver = () => (_driver ??= process.env.STORAGE_DRIVER === "s3" ? s3Driver() : localDriver());
 
-export type OwnerType = "task" | "submission" | "announcement" | "resource" | "avatar" | "project" | "branding";
+export type OwnerType = "task" | "submission" | "announcement" | "resource" | "avatar" | "project" | "branding" | "message";
 
 export type PreparedUpload = { name: string; size: number; mime: string; buf: Buffer };
 

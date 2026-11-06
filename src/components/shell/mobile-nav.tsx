@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Home, CheckSquare, CalendarDays, Bell, Menu, X } from "lucide-react";
+import { Home, CheckSquare, MessagesSquare, Bell, Menu, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { isActive, NavList, Brand } from "./sidebar";
 import { ThemeToggle } from "./theme-toggle";
@@ -16,7 +16,7 @@ export function MobileNav({ role, canReview, badges, orgName }: { role: "admin" 
   const tabs = [
     { href: "/", label: "Home", icon: Home },
     { href: "/tasks", label: "Tasks", icon: CheckSquare },
-    { href: "/calendar", label: "Calendar", icon: CalendarDays },
+    { href: "/messages", label: "Chat", icon: MessagesSquare, count: badges.messages },
     { href: "/notifications", label: "Inbox", icon: Bell, count: badges.notifications },
   ];
   return (

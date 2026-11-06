@@ -20,6 +20,7 @@ export type TaskInput = {
   priority: "low" | "medium" | "high" | "urgent"; dueAt: Date | null; timezone: string; deliverables: string; completionCriteria: string;
   submissionTypes: SubmissionType[]; checklist: ChecklistItem[]; links: LinkItem[]; requiresReview: boolean; reviewerId: string | null;
   internalNotes: string;
+  workGroupId?: string | null;
 };
 
 export async function logTaskEvent(taskId: string, actorId: string | null, kind: string, detail: Record<string, unknown> = {}) {

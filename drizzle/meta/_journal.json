@@ -15,6 +15,20 @@
       "when": 1793998095829,
       "tag": "0001_push_subscriptions",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794007252345,
+      "tag": "0002_chat",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794007277262,
+      "tag": "0003_task_work_group",
+      "breakpoints": true
     }
   ]
 }

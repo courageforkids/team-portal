@@ -13,7 +13,7 @@ const H = 3600_000, D = 24 * H;
 async function main() {
   if (process.env.NODE_ENV === "production" && !process.env.ALLOW_DEMO_SEED) throw new Error("Refusing to seed demo data in production.");
   const { db, close } = connect();
-  await db.execute(sql`truncate table audit_log, notifications, email_outbox, announcement_reads, announcements, events, resources,
+  await db.execute(sql`truncate table messages, conversation_members, conversations, push_subscriptions, audit_log, notifications, email_outbox, announcement_reads, announcements, events, resources,
     accountability_records, extension_requests, task_events, task_comments, reviews, submissions, task_assignees, tasks, task_series,
     milestones, projects, files, task_categories, password_resets, invitations, sessions, rate_limits, users, departments, settings cascade`);
 
@@ -118,6 +118,27 @@ async function main() {
     { title: "Submission Guidelines", category: "Guides", kind: "note", body: "1. Read the instructions and completion criteria.\n2. Upload files or add links.\n3. Add a short note.\n4. Click Submit for review.\n\nNever include patient names, photos or medical details unless the family has given written consent.", createdById: U.jacob },
     { title: "Brand kit", category: "Branding", kind: "note", body: "Navy #004F81 · Yellow #FED438 · Tagline: Their fight. Our mission.", createdById: U.jacob },
   ]);
+  // Chat: team chat, one work pair with a shared task, and a direct message.
+  const [team] = await db.insert(s.conversations).values({ kind: "team", title: "Everyone", description: "The whole Courage for Kids team.", lastMessageAt: new Date(now - 20 * 60_000) }).returning();
+  await db.insert(s.conversationMembers).values(Object.values(U).map((userId) => ({ conversationId: team.id, userId, lastReadAt: new Date(now - 60 * 60_000) })));
+  await db.insert(s.messages).values([
+    { conversationId: team.id, authorId: U.jacob, body: "Welcome to team chat! Use this for anything the whole team should see.", createdAt: new Date(now - 90 * 60_000) },
+    { conversationId: team.id, authorId: U.arleigh, body: "Holiday graphics are almost done, will submit tonight 🎨", createdAt: new Date(now - 40 * 60_000) },
+    { conversationId: team.id, authorId: U.isaac, body: "Packing day sign-ups are open. Bring a friend!", createdAt: new Date(now - 20 * 60_000) },
+  ]);
+  const [pair] = await db.insert(s.conversations).values({ kind: "workgroup", title: "Sponsor outreach", description: "Julia + Isaac reaching out to local businesses.", createdById: U.jacob, lastMessageAt: new Date(now - 30 * 60_000) }).returning();
+  await db.insert(s.conversationMembers).values([U.julia, U.isaac].map((userId) => ({ conversationId: pair.id, userId })));
+  await db.insert(s.messages).values([
+    { conversationId: pair.id, body: "Jacob Rogers created the work group “Sponsor outreach”", system: true, createdAt: new Date(now - 60 * 60_000) },
+    { conversationId: pair.id, authorId: U.julia, body: "I'll take the coffee shops, can you do the bookstores?", createdAt: new Date(now - 35 * 60_000) },
+    { conversationId: pair.id, authorId: U.isaac, body: "Yep! I'll draft the email tonight.", createdAt: new Date(now - 30 * 60_000) },
+  ]);
+  const [pt] = await db.insert(s.tasks).values({ ...base, title: "Contact 10 local businesses about sponsoring boxes (sample)", instructions: "Split the list between you. Log who said yes.", priority: "medium", status: "in_progress", dueAt: new Date(now + 7 * D), workGroupId: pair.id, reviewerId: U.jacob, createdById: U.jacob, departmentId: dep("fundraising") }).returning();
+  await db.insert(s.taskAssignees).values([{ taskId: pt.id, userId: U.julia }, { taskId: pt.id, userId: U.isaac }]);
+  const [dm] = await db.insert(s.conversations).values({ kind: "dm", dmKey: [U.jacob, U.reese].sort().join(":"), createdById: U.jacob, lastMessageAt: new Date(now - 10 * 60_000) }).returning();
+  await db.insert(s.conversationMembers).values([{ conversationId: dm.id, userId: U.jacob }, { conversationId: dm.id, userId: U.reese }]);
+  await db.insert(s.messages).values({ conversationId: dm.id, authorId: U.reese, body: "Do we know how many teens are on the hospital list yet?", createdAt: new Date(now - 10 * 60_000) });
+
   console.log(`Demo data ready. Sign in as jacob@demo.cfk.test (admin), julia@demo.cfk.test (leader) or sam@demo.cfk.test (volunteer). Password: ${DEMO_PASSWORD}`);
   await close();
 }

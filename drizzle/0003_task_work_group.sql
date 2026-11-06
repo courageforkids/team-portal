@@ -1,0 +1,1 @@
+ALTER TABLE "tasks" ADD COLUMN "work_group_id" uuid;
