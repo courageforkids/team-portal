@@ -2,9 +2,10 @@ import "dotenv/config";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "../src/db/schema";
+import { databaseUrl } from "../src/db/url";
 
 export function connect() {
-  const client = postgres(process.env.DATABASE_URL!, { max: 1 });
+  const client = postgres(databaseUrl(), { max: 1 });
   return { db: drizzle(client, { schema }), close: () => client.end() };
 }
 
