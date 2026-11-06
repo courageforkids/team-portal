@@ -1,0 +1,12 @@
+# Runs deadline reminders, recurring-task generation and scheduled announcements every 30 minutes.
+# (The portal also runs these automatically whenever someone opens it, at most every 10 minutes.)
+# Setup: repo Settings → Secrets → Actions: PORTAL_URL (e.g. https://team.teamcourageforkids.org) and CRON_SECRET.
+name: Portal reminders
+on:
+  schedule: [{ cron: "*/30 * * * *" }]
+  workflow_dispatch: {}
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsS -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "${{ secrets.PORTAL_URL }}/api/cron"
