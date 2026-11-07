@@ -510,3 +510,19 @@ export const volunteerHours = pgTable("volunteer_hours", {
   reviewNote: text("review_note").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("volunteer_hours_user_idx").on(t.userId, t.date), index("volunteer_hours_status_idx").on(t.status)]);
+
+/* ───────────── API keys (for automation such as Claude) ───────────── */
+
+export const apiKeys = pgTable("api_keys", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  keyHash: text("key_hash").notNull().unique(),
+  /** First characters of the key, shown so you can tell keys apart. */
+  prefix: text("prefix").notNull(),
+  /** The administrator the key acts as. Deactivated or demoted → the key stops working. */
+  createdById: uuid("created_by_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

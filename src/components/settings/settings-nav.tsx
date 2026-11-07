@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
-import { Users, MailPlus, Building2, Tags, BellRing, Repeat, Palette, Mail, ScrollText, Download } from "lucide-react";
+import { Users, MailPlus, Building2, Tags, BellRing, Repeat, Palette, Mail, ScrollText, Download, KeyRound } from "lucide-react";
 import { Tabs } from "@/components/ui/tabs";
 import { cn } from "@/lib/cn";
 
@@ -17,6 +17,7 @@ export const SETTINGS_SECTIONS = [
   { href: "/settings/email", label: "Email", icon: Mail },
   { href: "/settings/activity", label: "Activity log", icon: ScrollText },
   { href: "/settings/export", label: "Data export", icon: Download },
+  { href: "/settings/api-keys", label: "API keys", icon: KeyRound },
 ] as const;
 
 export function SettingsNav() {

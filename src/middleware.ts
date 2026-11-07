@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC = ["/login", "/forgot-password", "/reset-password", "/invite", "/api/cron", "/api/calendar", "/api/health"];
+const PUBLIC = ["/api/v1", "/login", "/forgot-password", "/reset-password", "/invite", "/api/cron", "/api/calendar", "/api/health"];
 
 /** Fast redirect for signed-out visitors. Real authorization happens on the server for every request. */
 export function middleware(req: NextRequest) {
