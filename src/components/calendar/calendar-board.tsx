@@ -367,6 +367,11 @@ function EventDetailDialog({ item, ctx, onClose, onEdit }: { item: CalItem | nul
             )}
           </dl>
           {it.description && <div className="border-t border-line pt-4"><RichText text={it.description} className="text-sm" /></div>}
+          {it.kind === "event" && (
+            <Link href={`/volunteer/events/${it.id}`} className="flex items-center justify-between rounded-xl border border-line px-4 py-3 text-sm font-semibold text-brand-ink transition hover:border-brand/40 hover:bg-brand-soft">
+              {ctx.isAdmin ? "Volunteer sign-ups & attendance" : "Volunteer sign-ups"}<span aria-hidden>→</span>
+            </Link>
+          )}
           {ctx.isAdmin && it.kind === "event" && (
             <div className="flex flex-col-reverse gap-2 border-t border-line pt-4 sm:flex-row sm:justify-end">
               <ConfirmAction

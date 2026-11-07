@@ -13,7 +13,7 @@ const H = 3600_000, D = 24 * H;
 async function main() {
   if (process.env.NODE_ENV === "production" && !process.env.ALLOW_DEMO_SEED) throw new Error("Refusing to seed demo data in production.");
   const { db, close } = connect();
-  await db.execute(sql`truncate table messages, conversation_members, conversations, push_subscriptions, audit_log, notifications, email_outbox, announcement_reads, announcements, events, resources,
+  await db.execute(sql`truncate table volunteer_hours, shift_signups, event_shifts, messages, conversation_members, conversations, push_subscriptions, audit_log, notifications, email_outbox, announcement_reads, announcements, events, resources,
     accountability_records, extension_requests, task_events, task_comments, reviews, submissions, task_assignees, tasks, task_series,
     milestones, projects, files, task_categories, password_resets, invitations, sessions, rate_limits, users, departments, settings cascade`);
 
@@ -118,6 +118,18 @@ async function main() {
     { title: "Submission Guidelines", category: "Guides", kind: "note", body: "1. Read the instructions and completion criteria.\n2. Upload files or add links.\n3. Add a short note.\n4. Click Submit for review.\n\nNever include patient names, photos or medical details unless the family has given written consent.", createdById: U.jacob },
     { title: "Brand kit", category: "Branding", kind: "note", body: "Navy #004F81 · Yellow #FED438 · Tagline: Their fight. Our mission.", createdById: U.jacob },
   ]);
+  // Volunteer: shifts on the packing day, a past entry and a pending one.
+  const packing = (await db.select().from(s.events)).find((e) => e.title === "Courage Box packing day")!;
+  const sh = await db.insert(s.eventShifts).values([
+    { eventId: packing.id, label: "Setup", startsAt: packing.startsAt, endsAt: new Date(packing.startsAt.getTime() + H), capacity: 3, notes: "Bring tape and markers" },
+    { eventId: packing.id, label: "Packing", startsAt: new Date(packing.startsAt.getTime() + H), endsAt: new Date(packing.startsAt.getTime() + 3 * H), capacity: 8 },
+  ]).returning();
+  await db.insert(s.shiftSignups).values([{ shiftId: sh[0].id, userId: U.isaac }, { shiftId: sh[1].id, userId: U.julia }, { shiftId: sh[1].id, userId: U.sam }]);
+  await db.insert(s.volunteerHours).values([
+    { userId: U.arleigh, date: new Date(now - 20 * D).toISOString().slice(0, 10), minutes: 120, activity: "Toy drive collection (sample)", status: "approved", reviewedById: U.jacob, reviewedAt: new Date(now - 19 * D) },
+    { userId: U.arleigh, date: new Date(now - 2 * D).toISOString().slice(0, 10), minutes: 90, activity: "Made holiday graphics (sample)", status: "pending" },
+  ]);
+
   // Chat: team chat, one work pair with a shared task, and a direct message.
   const [team] = await db.insert(s.conversations).values({ kind: "team", title: "Everyone", description: "The whole Courage for Kids team.", lastMessageAt: new Date(now - 20 * 60_000) }).returning();
   await db.insert(s.conversationMembers).values(Object.values(U).map((userId) => ({ conversationId: team.id, userId, lastReadAt: new Date(now - 60 * 60_000) })));

@@ -1,9 +1,9 @@
 import {
   Home, CheckSquare, CalendarDays, Megaphone, FolderKanban, Users, BookOpen, LayoutDashboard, ListChecks, Inbox,
-  BarChart3, ShieldCheck, Settings, Building2, MessagesSquare, type LucideIcon,
+  BarChart3, ShieldCheck, Settings, Building2, MessagesSquare, HeartHandshake, type LucideIcon,
 } from "lucide-react";
 
-export type NavItem = { href: string; label: string; icon: LucideIcon; badgeKey?: "reviews" | "notifications" | "messages" };
+export type NavItem = { href: string; label: string; icon: LucideIcon; badgeKey?: "reviews" | "notifications" | "messages" | "hours" };
 export type NavGroups = { main: NavItem[]; admin: NavItem[] };
 
 export function navFor(role: "admin" | "leader" | "volunteer", canReview: boolean): NavGroups {
@@ -12,6 +12,7 @@ export function navFor(role: "admin" | "leader" | "volunteer", canReview: boolea
     { href: "/tasks", label: "My tasks", icon: CheckSquare },
     { href: "/messages", label: "Chat", icon: MessagesSquare, badgeKey: "messages" },
     { href: "/calendar", label: "Calendar", icon: CalendarDays },
+    { href: "/volunteer", label: "Volunteer", icon: HeartHandshake, badgeKey: role === "admin" ? "hours" : undefined },
     { href: "/announcements", label: "Announcements", icon: Megaphone },
   ];
   if (role !== "volunteer") main.push({ href: "/projects", label: "Projects", icon: FolderKanban }, { href: "/departments", label: "Departments", icon: Building2 });

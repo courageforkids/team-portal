@@ -56,12 +56,12 @@ export async function GET(req: Request) {
   page.drawText(u.name, { x: M, y, size: 26, font: bold, color: rgb(0.07, 0.09, 0.15) });
   y -= 30;
   const periodText = rows.length
-    ? `${niceDate(rows[0].date)} to ${niceDate(rows.at(-1)!.date)}`
-    : period === "year" ? `the ${schoolYearStart().slice(0, 4)}–${Number(schoolYearStart().slice(0, 4)) + 1} school year` : "all time";
+    ? rows[0].date === rows.at(-1)!.date ? `on ${niceDate(rows[0].date)}` : `from ${niceDate(rows[0].date)} to ${niceDate(rows.at(-1)!.date)}`
+    : period === "year" ? `during the ${schoolYearStart().slice(0, 4)}–${Number(schoolYearStart().slice(0, 4)) + 1} school year` : "to date";
   const line = `completed ${fmtH(total)} hours of approved volunteer service with Courage for Kids, a 501(c)(3)`;
   page.drawText(line, { x: M, y, size: 12, font, color: rgb(0.2, 0.22, 0.26) });
   y -= 17;
-  page.drawText(`nonprofit organization (EIN 39-3833022), from ${periodText}.`, { x: M, y, size: 12, font, color: rgb(0.2, 0.22, 0.26) });
+  page.drawText(`nonprofit organization (EIN 39-3833022), ${periodText}.`, { x: M, y, size: 12, font, color: rgb(0.2, 0.22, 0.26) });
 
   // Entries table
   y -= 36;

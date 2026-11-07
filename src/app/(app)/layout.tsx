@@ -1,4 +1,4 @@
-import { and, count, eq, inArray, isNull } from "drizzle-orm";
+import { and, count, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { notifications, tasks } from "@/db/schema";
 import { requireUser } from "@/server/auth";
@@ -21,7 +21,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const [pendingReviews] = await db.select({ n: count() }).from(tasks).where(reviewWhere);
   const [isReviewer] = user.role === "admin" ? [{ n: 1 }] : await db.select({ n: count() }).from(tasks).where(eq(tasks.reviewerId, user.id));
   const canReview = user.role !== "volunteer" && isReviewer.n > 0;
-  const badges = { notifications: unread.n, reviews: pendingReviews.n, messages: await unreadMessageTotal(user.id) };
+  const pendingHours = user.role === "admin" ? Number(((await db.execute(sql`select count(*)::int as n from volunteer_hours where status = 'pending'`)) as unknown as { n: number }[])[0]?.n ?? 0) : 0;
+  const badges = { notifications: unread.n, reviews: pendingReviews.n, messages: await unreadMessageTotal(user.id), hours: pendingHours };
 
   return (
     <div className="min-h-dvh">
