@@ -2,13 +2,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
-import { Users, MailPlus, Building2, Tags, BellRing, Repeat, Palette, Mail, ScrollText, Download, KeyRound } from "lucide-react";
+import { Users, MailPlus, Building2, Tags, BellRing, Repeat, Palette, Mail, ScrollText, Download, KeyRound, ListChecks } from "lucide-react";
 import { Tabs } from "@/components/ui/tabs";
 import { cn } from "@/lib/cn";
 
 export const SETTINGS_SECTIONS = [
   { href: "/settings/members", label: "Members", icon: Users },
   { href: "/settings/invitations", label: "Invitations", icon: MailPlus },
+  { href: "/settings/onboarding", label: "Onboarding", icon: ListChecks },
   { href: "/settings/departments", label: "Departments", icon: Building2 },
   { href: "/settings/categories", label: "Task categories", icon: Tags },
   { href: "/settings/reminders", label: "Reminders", icon: BellRing },

@@ -50,6 +50,13 @@
       "when": 1794015015483,
       "tag": "0006_meetings_polls_shoutouts",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794016380826,
+      "tag": "0007_onboarding_reports",
+      "breakpoints": true
     }
   ]
 }
