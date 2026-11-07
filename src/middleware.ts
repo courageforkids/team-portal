@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC = ["/api/v1", "/login", "/forgot-password", "/reset-password", "/invite", "/api/cron", "/api/calendar", "/api/health"];
+const PUBLIC = ["/api/v1", "/login", "/forgot-password", "/reset-password", "/invite", "/api/cron", "/api/calendar", "/api/health", "/launch"];
 
 /** Fast redirect for signed-out visitors. Real authorization happens on the server for every request. */
 export function middleware(req: NextRequest) {
@@ -15,4 +15,4 @@ export function middleware(req: NextRequest) {
   }
   return NextResponse.next();
 }
-export const config = { matcher: ["/((?!_next/static|_next/image|icon.png|apple-icon.png|logo.png|robots.txt|manifest.webmanifest|sw.js).*)"] };
+export const config = { matcher: ["/((?!_next/static|_next/image|icon.png|apple-icon.png|logo.png|splash/|robots.txt|manifest.webmanifest|sw.js).*)"] };

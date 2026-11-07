@@ -5,9 +5,9 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Courage for Kids Team Portal",
     short_name: "CFK Portal",
     description: "Courage for Kids team assignments, deadlines and updates.",
-    start_url: "/",
+    start_url: "/launch",
     display: "standalone",
-    background_color: "#f7f7f5",
+    background_color: "#004F81",
     theme_color: "#004F81",
     icons: [
       { src: "/icon.png", sizes: "512x512", type: "image/png" },
