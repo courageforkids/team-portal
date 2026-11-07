@@ -8,7 +8,8 @@ import "dotenv/config";
 import { execSync } from "node:child_process";
 import { eq } from "drizzle-orm";
 import { connect, DEPARTMENTS, CATEGORIES } from "./lib";
-import { departments, settings, taskCategories, users } from "../src/db/schema";
+import { apiKeys, departments, settings, taskCategories, users } from "../src/db/schema";
+import { readFileSync, existsSync } from "node:fs";
 import { hashPassword, passwordProblem } from "../src/server/crypto";
 
 async function main() {
@@ -39,6 +40,31 @@ async function main() {
       console.log(`[deploy-setup] Created administrator ${email}.`);
     }
   }
+  await registerBootstrapKeys(db);
   await close();
+}
+
+/**
+ * Registers API keys listed (as hashes only) in deploy/bootstrap-api-keys.json, owned by the main administrator.
+ * Each key is added once; a key that was later revoked is never re-added.
+ */
+async function registerBootstrapKeys(db: ReturnType<typeof connect>["db"]) {
+  const file = "deploy/bootstrap-api-keys.json";
+  if (!existsSync(file)) return;
+  const list = JSON.parse(readFileSync(file, "utf8")) as { name: string; hash: string; prefix: string; expiresInDays?: number }[];
+  const owner = process.env.ADMIN_EMAIL
+    ? (await db.select().from(users).where(eq(users.email, process.env.ADMIN_EMAIL.toLowerCase().trim())).limit(1))[0]
+    : (await db.select().from(users).where(eq(users.role, "admin")).limit(1))[0];
+  if (!owner || owner.role !== "admin") { console.log("[deploy-setup] No administrator to own bootstrap API keys — skipping."); return; }
+  for (const k of list) {
+    if (!/^[0-9a-f]{64}$/.test(k.hash)) continue;
+    const exists = (await db.select({ id: apiKeys.id }).from(apiKeys).where(eq(apiKeys.keyHash, k.hash)).limit(1))[0];
+    if (exists) continue;
+    await db.insert(apiKeys).values({
+      name: k.name, keyHash: k.hash, prefix: k.prefix, createdById: owner.id,
+      expiresAt: k.expiresInDays ? new Date(Date.now() + k.expiresInDays * 86400_000) : null,
+    });
+    console.log(`[deploy-setup] Registered API key “${k.name}” for ${owner.email}.`);
+  }
 }
 main().catch((e) => { console.error("[deploy-setup] failed:", e.message); process.exit(1); });
