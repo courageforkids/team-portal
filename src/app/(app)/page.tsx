@@ -18,8 +18,6 @@ import { ButtonLink } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { TaskCard, DueChip } from "@/components/tasks/task-bits";
 import { WelcomeCard } from "@/components/home/welcome-card";
-import { OnboardingHomeCard } from "@/components/onboarding/checklist";
-import { onboardingStatus } from "@/server/onboarding";
 import { PushPrompt } from "@/components/home/push-toggle";
 import { vapidPublicKey } from "@/server/push";
 import { ago, DEFAULT_TZ, fmtDate, fmtDateTime } from "@/lib/dates";
@@ -70,7 +68,6 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const votedIds = new Set(myVotes.map((v) => v.pollId));
   const pollsToVote = openPolls.filter((p) => !p.closedAt && !(p.closesAt && p.closesAt <= now) && !votedIds.has(p.id) && audienceMatches(p.audience, me));
   const shout = latestShout[0];
-  const onboarding = (await onboardingStatus([me.id])).get(me.id) ?? [];
   const shoutTo = shout ? await db.select({ name: users.name }).from(shoutoutRecipients).innerJoin(users, eq(users.id, shoutoutRecipients.userId)).where(eq(shoutoutRecipients.shoutoutId, shout.s.id)) : [];
   const needsAck = visibleAnns.filter((r) => r.a.requireAck && !r.ack);
   const pinned = visibleAnns.find((r) => r.a.pinned);
@@ -116,7 +113,6 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       </section>
 
       {!me.onboardedAt && <WelcomeCard name={firstName} role={me.role} />}
-      <OnboardingHomeCard steps={onboarding} />
       {vapidPublicKey() && <PushPrompt publicKey={vapidPublicKey()!} />}
 
       {needsAck.length > 0 && (

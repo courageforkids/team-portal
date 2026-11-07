@@ -604,31 +604,6 @@ export const shoutoutCheers = pgTable("shoutout_cheers", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.shoutoutId, t.userId] })]);
 
-/* ───────────── Onboarding ───────────── */
-
-/** photo / notifications / chat_intro are checked automatically; resource = read & confirm; manual = member ticks it. */
-export const onboardingKindEnum = pgEnum("onboarding_kind", ["photo", "notifications", "chat_intro", "resource", "manual"]);
-
-export const onboardingSteps = pgTable("onboarding_steps", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  title: text("title").notNull(),
-  description: text("description").notNull().default(""),
-  kind: onboardingKindEnum("kind").notNull().default("manual"),
-  resourceId: uuid("resource_id").references(() => resources.id, { onDelete: "set null" }),
-  url: text("url"),
-  /** Empty = everyone. */
-  roles: jsonb("roles").$type<("admin" | "leader" | "volunteer")[]>().notNull().default([]),
-  position: integer("position").notNull().default(0),
-  active: boolean("active").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-export const onboardingProgress = pgTable("onboarding_progress", {
-  stepId: uuid("step_id").notNull().references(() => onboardingSteps.id, { onDelete: "cascade" }),
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  completedAt: timestamp("completed_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [primaryKey({ columns: [t.stepId, t.userId] })]);
-
 /* ───────────── Monthly reports ───────────── */
 
 /** Numbers and notes the admin adds by hand; everything else in the report is calculated. */
