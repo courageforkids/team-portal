@@ -13,7 +13,7 @@ const H = 3600_000, D = 24 * H;
 async function main() {
   if (process.env.NODE_ENV === "production" && !process.env.ALLOW_DEMO_SEED) throw new Error("Refusing to seed demo data in production.");
   const { db, close } = connect();
-  await db.execute(sql`truncate table volunteer_hours, shift_signups, event_shifts, messages, conversation_members, conversations, push_subscriptions, audit_log, notifications, email_outbox, announcement_reads, announcements, events, resources,
+  await db.execute(sql`truncate table shoutout_cheers, shoutout_recipients, shoutouts, poll_votes, polls, meeting_attendance, meetings, api_keys, volunteer_hours, shift_signups, event_shifts, messages, conversation_members, conversations, push_subscriptions, audit_log, notifications, email_outbox, announcement_reads, announcements, events, resources,
     accountability_records, extension_requests, task_events, task_comments, reviews, submissions, task_assignees, tasks, task_series,
     milestones, projects, files, task_categories, password_resets, invitations, sessions, rate_limits, users, departments, settings cascade`);
 
@@ -129,6 +129,20 @@ async function main() {
     { userId: U.arleigh, date: new Date(now - 20 * D).toISOString().slice(0, 10), minutes: 120, activity: "Toy drive collection (sample)", status: "approved", reviewedById: U.jacob, reviewedAt: new Date(now - 19 * D) },
     { userId: U.arleigh, date: new Date(now - 2 * D).toISOString().slice(0, 10), minutes: 90, activity: "Made holiday graphics (sample)", status: "pending" },
   ]);
+
+  // Meetings, polls, shout-outs
+  const weekly = (await db.select().from(s.events)).find((e) => e.title === "Weekly team meeting")!;
+  const [mt] = await db.insert(s.meetings).values({ eventId: weekly.id, title: weekly.title, startsAt: weekly.startsAt, agenda: "1. Wins from this week\n2. Packing day plan\n3. Holiday campaign graphics\n4. Questions", createdById: U.jacob, updatedById: U.jacob }).returning();
+  const [past] = await db.insert(s.meetings).values({ title: "Kickoff meeting (sample)", startsAt: new Date(now - 6 * D), agenda: "1. Welcome\n2. Roles", notes: "Everyone introduced themselves. Decided on weekly check-ins.\nJulia will draft the sponsor list.", createdById: U.jacob, updatedById: U.jacob, notesSharedAt: new Date(now - 6 * D) }).returning();
+  const att: { meetingId: string; userId: string; status: "present" | "excused" }[] = [U.jacob, U.julia, U.isaac, U.arleigh, U.owen].map((userId) => ({ meetingId: past.id, userId, status: "present" }));
+  att.push({ meetingId: past.id, userId: U.reese, status: "excused" });
+  await db.insert(s.meetingAttendance).values(att);
+  void mt;
+  const [poll] = await db.insert(s.polls).values({ question: "Which day works best for packing?", options: [{ id: "sat", label: "Saturday morning" }, { id: "sun", label: "Sunday afternoon" }, { id: "fri", label: "Friday after school" }], createdById: U.isaac, closesAt: new Date(now + 4 * D) }).returning();
+  await db.insert(s.pollVotes).values([{ pollId: poll.id, userId: U.julia, optionIds: ["sat"] }, { pollId: poll.id, userId: U.owen, optionIds: ["sun"] }, { pollId: poll.id, userId: U.david, optionIds: ["sat"] }]);
+  const [so] = await db.insert(s.shoutouts).values({ fromId: U.jacob, badge: "above", message: "Arleigh made the holiday graphics in one night. They look amazing!", createdAt: new Date(now - 3 * H) }).returning();
+  await db.insert(s.shoutoutRecipients).values({ shoutoutId: so.id, userId: U.arleigh });
+  await db.insert(s.shoutoutCheers).values([{ shoutoutId: so.id, userId: U.julia }, { shoutoutId: so.id, userId: U.owen }]);
 
   // Chat: team chat, one work pair with a shared task, and a direct message.
   const [team] = await db.insert(s.conversations).values({ kind: "team", title: "Everyone", description: "The whole Courage for Kids team.", lastMessageAt: new Date(now - 20 * 60_000) }).returning();

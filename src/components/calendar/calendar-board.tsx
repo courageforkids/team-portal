@@ -5,6 +5,7 @@ import { CalendarX, Clock, Eye, FolderKanban, MapPin, Pencil, Square, SquareChec
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { StartNotesButton } from "@/components/meetings/start-notes";
 import { ConfirmAction } from "@/components/ui/confirm";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/cn";
@@ -367,7 +368,8 @@ function EventDetailDialog({ item, ctx, onClose, onEdit }: { item: CalItem | nul
             )}
           </dl>
           {it.description && <div className="border-t border-line pt-4"><RichText text={it.description} className="text-sm" /></div>}
-          {it.kind === "event" && (
+          {it.kind === "event" && it.type === "meeting" && <StartNotesButton eventId={it.id} label="Meeting agenda & notes" className="w-full justify-center" />}
+          {it.kind === "event" && it.type !== "meeting" && (
             <Link href={`/volunteer/events/${it.id}`} className="flex items-center justify-between rounded-xl border border-line px-4 py-3 text-sm font-semibold text-brand-ink transition hover:border-brand/40 hover:bg-brand-soft">
               {ctx.isAdmin ? "Volunteer sign-ups & attendance" : "Volunteer sign-ups"}<span aria-hidden>→</span>
             </Link>

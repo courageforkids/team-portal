@@ -21,6 +21,7 @@ export type TaskInput = {
   submissionTypes: SubmissionType[]; checklist: ChecklistItem[]; links: LinkItem[]; requiresReview: boolean; reviewerId: string | null;
   internalNotes: string;
   workGroupId?: string | null;
+  meetingId?: string | null;
 };
 
 export async function logTaskEvent(taskId: string, actorId: string | null, kind: string, detail: Record<string, unknown> = {}) {

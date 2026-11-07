@@ -7,7 +7,8 @@ import {
   LayoutDashboard, AlertTriangle, Inbox, Pin,
 } from "lucide-react";
 import { db } from "@/db";
-import { announcementReads, announcements, events, notifications, tasks } from "@/db/schema";
+import { announcementReads, announcements, events, notifications, pollVotes, polls, shoutoutRecipients, shoutouts, tasks, users } from "@/db/schema";
+import { badgeOf } from "@/lib/community";
 import { requireUser } from "@/server/auth";
 import { loadTasks } from "@/server/queries";
 import { allowedVisibilities, audienceMatches } from "@/server/policy";
@@ -59,6 +60,15 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       .where(lte(announcements.publishAt, now)).orderBy(desc(announcements.pinned), desc(announcements.publishAt)).limit(20),
   ]);
   const visibleAnns = anns.filter((r) => audienceMatches(r.a.audience, me));
+  const [openPolls, myVotes, latestShout] = await Promise.all([
+    db.select({ id: polls.id, question: polls.question, audience: polls.audience, closesAt: polls.closesAt, closedAt: polls.closedAt }).from(polls).orderBy(desc(polls.createdAt)).limit(20),
+    db.select({ pollId: pollVotes.pollId }).from(pollVotes).where(eq(pollVotes.userId, me.id)),
+    db.select({ s: shoutouts, from: users.name }).from(shoutouts).leftJoin(users, eq(users.id, shoutouts.fromId)).orderBy(desc(shoutouts.createdAt)).limit(1),
+  ]);
+  const votedIds = new Set(myVotes.map((v) => v.pollId));
+  const pollsToVote = openPolls.filter((p) => !p.closedAt && !(p.closesAt && p.closesAt <= now) && !votedIds.has(p.id) && audienceMatches(p.audience, me));
+  const shout = latestShout[0];
+  const shoutTo = shout ? await db.select({ name: users.name }).from(shoutoutRecipients).innerJoin(users, eq(users.id, shoutoutRecipients.userId)).where(eq(shoutoutRecipients.shoutoutId, shout.s.id)) : [];
   const needsAck = visibleAnns.filter((r) => r.a.requireAck && !r.ack);
   const pinned = visibleAnns.find((r) => r.a.pinned);
 
@@ -110,6 +120,14 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           <Megaphone className="h-5 w-5 shrink-0 text-accent-ink" />
           <span className="min-w-0 flex-1"><b className="text-fg">Please read and acknowledge:</b> <span className="text-fg-2">{needsAck[0].a.title}</span>{needsAck.length > 1 && <span className="text-muted"> (+{needsAck.length - 1} more)</span>}</span>
           <ArrowRight className="h-4 w-4 shrink-0 text-accent-ink" />
+        </Link>
+      )}
+
+      {pollsToVote.length > 0 && (
+        <Link href={`/polls#poll-${pollsToVote[0].id}`} className="focus-ring flex items-center gap-3 rounded-xl border border-brand/30 bg-brand-soft px-4 py-3 text-sm transition hover:brightness-[.98]">
+          <span className="text-lg" aria-hidden>🗳️</span>
+          <span className="min-w-0 flex-1"><b className="text-fg">Vote:</b> <span className="text-fg-2">{pollsToVote[0].question}</span>{pollsToVote.length > 1 && <span className="text-muted"> (+{pollsToVote.length - 1} more)</span>}</span>
+          <ArrowRight className="h-4 w-4 shrink-0 text-brand-ink" />
         </Link>
       )}
 
@@ -178,6 +196,16 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
               ))}
             </div>
           </Card>
+
+          {shout && (
+            <Link href={`/shoutouts#s-${shout.s.id}`} className="focus-ring card block p-5 transition hover:border-line-strong">
+              <div className="eyebrow mb-1.5">Latest shout-out</div>
+              <div className="flex items-start gap-3">
+                <span className="text-2xl" aria-hidden>{badgeOf(shout.s.badge).emoji}</span>
+                <div className="min-w-0"><div className="text-sm"><b>{shout.from?.split(" ")[0] ?? "Someone"}</b> → <b>{shoutTo.map((t) => t.name.split(" ")[0]).join(", ")}</b></div><p className="mt-0.5 line-clamp-3 text-sm text-muted">{shout.s.message}</p></div>
+              </div>
+            </Link>
+          )}
 
           {pinned && (
             <Link href={`/announcements/${pinned.a.id}`} className="focus-ring card block p-5 transition hover:border-line-strong">

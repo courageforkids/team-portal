@@ -15,5 +15,7 @@ export const GET = apiRoute(async (_req, actor) => ({
     "GET|POST /api/v1/events?from=&to=",
     "POST /api/v1/events/:id/shifts       sign-up shift",
     "GET|POST /api/v1/resources",
+    "GET|POST /api/v1/meetings             { title, startsAt, agenda } or { event: id, agenda }",
+    "GET|POST /api/v1/polls                { question, options: [..], closesAt?, roles?, anonymous?, multiple? }",
   ],
 }));

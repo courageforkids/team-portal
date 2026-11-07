@@ -208,6 +208,8 @@ export const tasks = pgTable("tasks", {
   seriesId: uuid("series_id").references(() => taskSeries.id, { onDelete: "set null" }),
   /** Set when the task was assigned to a work pair/group (a "workgroup" conversation). */
   workGroupId: uuid("work_group_id"),
+  /** Set when the task came from a meeting's action items. */
+  meetingId: uuid("meeting_id"),
   createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
   firstSubmittedAt: timestamp("first_submitted_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
@@ -526,3 +528,78 @@ export const apiKeys = pgTable("api_keys", {
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/* ───────────── Meetings ───────────── */
+
+export const attendanceStatusEnum = pgEnum("attendance_status", ["present", "late", "absent", "excused"]);
+
+export const meetings = pgTable("meetings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** Optional link to a calendar event (one meeting page per event). */
+  eventId: uuid("event_id").unique().references(() => events.id, { onDelete: "set null" }),
+  title: text("title").notNull(),
+  startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+  agenda: text("agenda").notNull().default(""),
+  notes: text("notes").notNull().default(""),
+  visibility: visibilityEnum("visibility").notNull().default("everyone"),
+  notesSharedAt: timestamp("notes_shared_at", { withTimezone: true }),
+  createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+  updatedById: uuid("updated_by_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("meetings_starts_idx").on(t.startsAt)]);
+
+export const meetingAttendance = pgTable("meeting_attendance", {
+  meetingId: uuid("meeting_id").notNull().references(() => meetings.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  status: attendanceStatusEnum("status").notNull(),
+  markedAt: timestamp("marked_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.meetingId, t.userId] })]);
+
+/* ───────────── Polls ───────────── */
+
+export type PollOption = { id: string; label: string };
+
+export const polls = pgTable("polls", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  question: text("question").notNull(),
+  description: text("description").notNull().default(""),
+  options: jsonb("options").$type<PollOption[]>().notNull(),
+  multiple: boolean("multiple").notNull().default(false),
+  anonymous: boolean("anonymous").notNull().default(false),
+  /** always | after_vote | after_close */
+  showResults: text("show_results").notNull().default("after_vote"),
+  audience: jsonb("audience").$type<Audience>().notNull().default({}),
+  closesAt: timestamp("closes_at", { withTimezone: true }),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+  createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("polls_created_idx").on(t.createdAt)]);
+
+export const pollVotes = pgTable("poll_votes", {
+  pollId: uuid("poll_id").notNull().references(() => polls.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  optionIds: jsonb("option_ids").$type<string[]>().notNull(),
+  votedAt: timestamp("voted_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.pollId, t.userId] })]);
+
+/* ───────────── Shout-outs ───────────── */
+
+export const shoutouts = pgTable("shoutouts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  fromId: uuid("from_id").references(() => users.id, { onDelete: "set null" }),
+  message: text("message").notNull(),
+  badge: text("badge").notNull().default("thanks"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("shoutouts_created_idx").on(t.createdAt)]);
+
+export const shoutoutRecipients = pgTable("shoutout_recipients", {
+  shoutoutId: uuid("shoutout_id").notNull().references(() => shoutouts.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+}, (t) => [primaryKey({ columns: [t.shoutoutId, t.userId] }), index("shoutout_recipients_user_idx").on(t.userId)]);
+
+export const shoutoutCheers = pgTable("shoutout_cheers", {
+  shoutoutId: uuid("shoutout_id").notNull().references(() => shoutouts.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.shoutoutId, t.userId] })]);

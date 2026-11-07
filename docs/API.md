@@ -23,6 +23,8 @@ For trusted automation (e.g. Claude) acting on behalf of an Executive Administra
 | GET/POST | `/api/v1/announcements` | `{ title, body, category?: update\|reminder\|event\|news\|policy\|meeting, pinned?, requireAck?, audience?: { roles?: ["leader"], departments?: ["Media"] }, publishAt? }` |
 | GET/POST | `/api/v1/events` | GET `?from&to`; POST `{ title, startsAt, endsAt?, allDay?, location?, description?, type?: meeting\|community\|fundraising\|volunteer\|milestone\|other, visibility?: everyone\|leadership\|admin, project? }` |
 | POST | `/api/v1/events/:id/shifts` | `{ label, startsAt, endsAt, capacity?, notes? }` |
+| GET/POST | `/api/v1/meetings` | `{ title, startsAt, agenda?, visibility? }` or `{ event: "<calendar event id>", agenda? }` (reuses that event's meeting page) |
+| GET/POST | `/api/v1/polls` | `{ question, options: ["A","B"], description?, closesAt?, roles?: ["leader"], multiple?, anonymous?, showResults?: always\|after_vote\|after_close }`. Notifies the audience. |
 | GET/POST | `/api/v1/resources` | `{ title, kind?: note\|link, body? (note), url? (link), category?, description?, visibility?, pinned? }` |
 
 Example:
