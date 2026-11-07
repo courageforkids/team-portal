@@ -29,7 +29,8 @@ export async function runMaintenance(now = new Date()) {
   const generated = await generateRecurring(now);
   const reminders = await sendDeadlineReminders(now);
   const announced = await publishDueAnnouncements(now);
-  return { generated, reminders, announced };
+  const shiftReminders = await remindUpcomingShifts(now);
+  return { generated, reminders, announced, shiftReminders };
 }
 
 export { nextOccurrence };
@@ -126,5 +127,22 @@ export async function publishDueAnnouncements(now = new Date()) {
   const due = await db.select({ id: announcements.id }).from(announcements).where(and(isNull(announcements.notifiedAt), lte(announcements.publishAt, now)));
   let n = 0;
   for (const a of due) n += await notifyAnnouncementAudience(a.id);
+  return n;
+}
+
+/** One reminder per person, about a day before a shift they signed up for. */
+export async function remindUpcomingShifts(now = new Date()) {
+  const { eventShifts, shiftSignups, events } = await import("@/db/schema");
+  const soon = await db.select({ s: eventShifts, title: events.title, location: events.location, userId: shiftSignups.userId })
+    .from(shiftSignups).innerJoin(eventShifts, eq(eventShifts.id, shiftSignups.shiftId)).innerJoin(events, eq(events.id, eventShifts.eventId))
+    .where(and(gt(eventShifts.startsAt, now), lte(eventShifts.startsAt, new Date(now.getTime() + 26 * 3600_000))));
+  let n = 0;
+  for (const r of soon) {
+    n += await notify([r.userId], {
+      type: "deadline_soon", title: `Coming up: ${r.title} (${r.s.label})`,
+      body: `${fmtDateTime(r.s.startsAt, "America/New_York")}${r.location ? ` · ${r.location}` : ""}`, href: `/volunteer/events/${r.s.eventId}`,
+      dedupeKey: `shift:${r.s.id}:${r.s.startsAt.getTime()}`,
+    });
+  }
   return n;
 }

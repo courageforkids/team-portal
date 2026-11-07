@@ -469,3 +469,44 @@ export const messages = pgTable("messages", {
   deletedById: uuid("deleted_by_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("messages_conv_created_idx").on(t.conversationId, t.createdAt)]);
+
+/* ───────────── Volunteer sign-ups & hours ───────────── */
+
+export const hoursStatusEnum = pgEnum("hours_status", ["pending", "approved", "rejected"]);
+
+/** Sign-up slots for an event (e.g. "Setup 5:30–6:30, 3 spots"). */
+export const eventShifts = pgTable("event_shifts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+  label: text("label").notNull(),
+  startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+  endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+  capacity: integer("capacity"), // null = unlimited
+  notes: text("notes").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("event_shifts_event_idx").on(t.eventId)]);
+
+export const shiftSignups = pgTable("shift_signups", {
+  shiftId: uuid("shift_id").notNull().references(() => eventShifts.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  /** null = not marked yet. */
+  attended: boolean("attended"),
+  hoursEntryId: uuid("hours_entry_id"),
+}, (t) => [primaryKey({ columns: [t.shiftId, t.userId] }), index("shift_signups_user_idx").on(t.userId)]);
+
+export const volunteerHours = pgTable("volunteer_hours", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  date: date("date").notNull(),
+  minutes: integer("minutes").notNull(),
+  activity: text("activity").notNull(),
+  description: text("description").notNull().default(""),
+  source: text("source").notNull().default("manual"), // manual | shift | admin
+  shiftId: uuid("shift_id").references(() => eventShifts.id, { onDelete: "set null" }),
+  status: hoursStatusEnum("status").notNull().default("pending"),
+  reviewedById: uuid("reviewed_by_id").references(() => users.id, { onDelete: "set null" }),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  reviewNote: text("review_note").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("volunteer_hours_user_idx").on(t.userId, t.date), index("volunteer_hours_status_idx").on(t.status)]);

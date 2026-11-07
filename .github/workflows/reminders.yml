@@ -1,12 +1,15 @@
-# Runs deadline reminders, recurring-task generation and scheduled announcements every 30 minutes.
-# (The portal also runs these automatically whenever someone opens it, at most every 10 minutes.)
-# Setup: repo Settings → Secrets → Actions: PORTAL_URL (e.g. https://team.teamcourageforkids.org) and CRON_SECRET.
-name: Portal reminders
+# Every 30 minutes: keeps the free database awake and sends due reminders, recurring tasks
+# and scheduled announcements. Calls a public health check — no secrets needed.
+# If the portal's address changes, update PORTAL_URL below (or set a repository variable named PORTAL_URL).
+name: Portal heartbeat
 on:
   schedule: [{ cron: "*/30 * * * *" }]
   workflow_dispatch: {}
 jobs:
-  run:
+  ping:
     runs-on: ubuntu-latest
     steps:
-      - run: curl -fsS -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" "${{ secrets.PORTAL_URL }}/api/cron"
+      - name: Ping the portal
+        env:
+          PORTAL_URL: ${{ vars.PORTAL_URL || 'https://team-portal-five-smoky.vercel.app' }}
+        run: curl -fsS --retry 3 --retry-delay 10 "$PORTAL_URL/api/health"
