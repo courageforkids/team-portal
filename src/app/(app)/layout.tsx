@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { canManageDonations } from "@/server/donations";
 import { and, count, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -13,18 +14,23 @@ import { unreadMessageTotal } from "@/server/chat";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
-  await runMaintenanceIfDue();
-  const s = await getSettings();
-  const [unread] = await db.select({ n: count() }).from(notifications).where(and(eq(notifications.userId, user.id), isNull(notifications.readAt)));
+  // Reminders and cleanup run after the page is sent, so they never slow down opening the app.
+  after(() => runMaintenanceIfDue());
   const reviewWhere = user.role === "admin"
     ? inArray(tasks.status, ["submitted", "under_review"])
     : and(inArray(tasks.status, ["submitted", "under_review"]), eq(tasks.reviewerId, user.id));
-  const [pendingReviews] = await db.select({ n: count() }).from(tasks).where(reviewWhere);
-  const [isReviewer] = user.role === "admin" ? [{ n: 1 }] : await db.select({ n: count() }).from(tasks).where(eq(tasks.reviewerId, user.id));
+  // Independent lookups run at the same time instead of one after another.
+  const [s, [unread], [pendingReviews], [isReviewer], canDonations, pendingHours, unreadMessages] = await Promise.all([
+    getSettings(),
+    db.select({ n: count() }).from(notifications).where(and(eq(notifications.userId, user.id), isNull(notifications.readAt))),
+    db.select({ n: count() }).from(tasks).where(reviewWhere),
+    user.role === "admin" ? Promise.resolve([{ n: 1 }]) : db.select({ n: count() }).from(tasks).where(eq(tasks.reviewerId, user.id)),
+    canManageDonations(user),
+    user.role === "admin" ? db.execute(sql`select count(*)::int as n from volunteer_hours where status = 'pending'`).then((r) => Number((r as unknown as { n: number }[])[0]?.n ?? 0)) : Promise.resolve(0),
+    unreadMessageTotal(user.id),
+  ]);
   const canReview = user.role !== "volunteer" && isReviewer.n > 0;
-  const canDonations = await canManageDonations(user);
-  const pendingHours = user.role === "admin" ? Number(((await db.execute(sql`select count(*)::int as n from volunteer_hours where status = 'pending'`)) as unknown as { n: number }[])[0]?.n ?? 0) : 0;
-  const badges = { notifications: unread.n, reviews: pendingReviews.n, messages: await unreadMessageTotal(user.id), hours: pendingHours };
+  const badges = { notifications: unread.n, reviews: pendingReviews.n, messages: unreadMessages, hours: pendingHours };
 
   return (
     <div className="min-h-dvh">

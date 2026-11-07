@@ -1,9 +1,9 @@
-# Every 30 minutes: keeps the free database awake and sends due reminders, recurring tasks
+# Every 5 minutes (GitHub may run it less often): keeps the app and free database warm so it opens fast, and sends due reminders, recurring tasks
 # and scheduled announcements. Calls a public health check — no secrets needed.
 # If the portal's address changes, update PORTAL_URL below (or set a repository variable named PORTAL_URL).
 name: Portal heartbeat
 on:
-  schedule: [{ cron: "*/30 * * * *" }]
+  schedule: [{ cron: "*/5 * * * *" }]
   workflow_dispatch: {}
 jobs:
   ping:
@@ -12,4 +12,6 @@ jobs:
       - name: Ping the portal
         env:
           PORTAL_URL: ${{ vars.PORTAL_URL || 'https://team-portal-five-smoky.vercel.app' }}
-        run: curl -fsS --retry 3 --retry-delay 10 "$PORTAL_URL/api/health"
+        run: |
+          curl -fsS --retry 3 --retry-delay 10 "$PORTAL_URL/api/health"
+          curl -fsS -o /dev/null "$PORTAL_URL/login"

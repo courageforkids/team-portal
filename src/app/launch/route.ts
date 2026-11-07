@@ -1,6 +1,7 @@
 /**
  * The home-screen app opens here first. It's a tiny static page served instantly from the CDN,
  * so people see the Courage for Kids splash instead of a blank screen while the portal loads.
+ * It moves on immediately; the splash stays on screen until the portal's first page is ready.
  */
 export const dynamic = "force-static";
 
@@ -21,7 +22,7 @@ p{margin:0;color:#FED438;font-weight:700;font-size:15px}
 </style></head><body><div class="w">
 <div class="logo"><img src="/logo.png" alt=""></div><h1>Courage for Kids</h1><p>Their fight. Our mission.</p>
 <div class="d" aria-label="Loading"><i></i><i></i><i></i></div></div>
-<script>setTimeout(function(){location.replace("/")},400)</script>
+<script>location.replace("/")</script>
 <noscript><meta http-equiv="refresh" content="0;url=/"></noscript>
 </body></html>`;
 
