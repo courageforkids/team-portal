@@ -1,4 +1,3 @@
-import { after } from "next/server";
 import { canManageDonations } from "@/server/donations";
 import { and, count, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -14,8 +13,8 @@ import { unreadMessageTotal } from "@/server/chat";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
-  // Reminders and cleanup run after the page is sent, so they never slow down opening the app.
-  after(() => runMaintenanceIfDue());
+  // Usually a no-op: the 5-minute heartbeat runs reminders and cleanup, so page loads rarely wait on it.
+  await runMaintenanceIfDue();
   const reviewWhere = user.role === "admin"
     ? inArray(tasks.status, ["submitted", "under_review"])
     : and(inArray(tasks.status, ["submitted", "under_review"]), eq(tasks.reviewerId, user.id));

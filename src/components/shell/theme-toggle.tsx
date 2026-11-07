@@ -7,6 +7,7 @@ type Theme = "light" | "dark" | "system";
 function apply(t: Theme) {
   const d = t === "dark" || (t === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.classList.toggle("dark", d);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", d ? "#0d1117" : "#f7f7f5");
 }
 export function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>("light");
