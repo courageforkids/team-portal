@@ -13,6 +13,7 @@ import { ROLE_LABEL } from "@/lib/task-meta";
 import { appUrl } from "@/server/email";
 import { vapidPublicKey } from "@/server/push";
 import { PushToggle } from "@/components/home/push-toggle";
+import { BirthdayForm } from "@/components/academy/birthday-form";
 
 export const metadata = { title: "Profile & preferences" };
 
@@ -20,7 +21,7 @@ export default async function ProfilePage() {
   const me = await requireUser();
   const u = (await db.select({
     name: users.name, email: users.email, avatarFileId: users.avatarFileId, role: users.role, title: users.title, departmentId: users.departmentId,
-    timezone: users.timezone, showEmail: users.showEmail, notificationPrefs: users.notificationPrefs, calendarToken: users.calendarToken,
+    timezone: users.timezone, showEmail: users.showEmail, notificationPrefs: users.notificationPrefs, calendarToken: users.calendarToken, birthday: users.birthday,
   }).from(users).where(eq(users.id, me.id)).limit(1))[0];
   const dept = u.departmentId ? (await db.select({ name: departments.name }).from(departments).where(eq(departments.id, u.departmentId)).limit(1))[0] : null;
   const s = await getSettings();
@@ -49,6 +50,7 @@ export default async function ProfilePage() {
           </Card>
         </div>
         <div className="space-y-6">
+          <Card><CardHeader title="🎂 Birthday" description="Month and day only. The team gets a reminder and you get a shout-out in team chat." /><div className="px-5 pb-5"><BirthdayForm value={u.birthday ?? null} /></div></Card>
           <Card><CardHeader title="Password" /><div className="px-5 pb-5"><PasswordForm /></div></Card>
           <Card><CardHeader title="Calendar subscription" description="See your deadlines and team events in Google or Apple Calendar." /><div className="px-5 pb-5">
             <CalendarFeedCard initialUrl={u.calendarToken ? appUrl(`/api/calendar/feed/${u.calendarToken}`) : null} />

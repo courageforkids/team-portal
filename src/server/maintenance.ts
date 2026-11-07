@@ -1,10 +1,11 @@
 import "server-only";
-import { and, eq, gt, inArray, isNotNull, isNull, lte, lt, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, isNull, lte, lt, ne, or, sql } from "drizzle-orm";
 import { addDays } from "date-fns";
 import { nextOccurrence } from "@/lib/recurrence";
 import { formatInTimeZone } from "date-fns-tz";
 import { db } from "@/db";
-import { announcements, taskAssignees, taskSeries, tasks, users } from "@/db/schema";
+import { announcements, conversations, messages, taskAssignees, taskSeries, tasks, users } from "@/db/schema";
+import { ensureTeamConversation } from "./chat";
 import { getSettings } from "./settings";
 import { adminIds, notify } from "./notify";
 import { createTasks } from "./tasks";
@@ -30,7 +31,8 @@ export async function runMaintenance(now = new Date()) {
   const reminders = await sendDeadlineReminders(now);
   const announced = await publishDueAnnouncements(now);
   const shiftReminders = await remindUpcomingShifts(now);
-  return { generated, reminders, announced, shiftReminders };
+  const birthdays = await postBirthdays(now);
+  return { generated, reminders, announced, shiftReminders, birthdays };
 }
 
 export { nextOccurrence };
@@ -143,6 +145,24 @@ export async function remindUpcomingShifts(now = new Date()) {
       body: `${fmtDateTime(r.s.startsAt, "America/New_York")}${r.location ? ` · ${r.location}` : ""}`, href: `/volunteer/events/${r.s.eventId}`,
       dedupeKey: `shift:${r.s.id}:${r.s.startsAt.getTime()}`,
     });
+  }
+  return n;
+}
+
+/** Posts a birthday shout-out in team chat once a year, on the day (Eastern time). */
+export async function postBirthdays(now = new Date()) {
+  const md = formatInTimeZone(now, "America/New_York", "MM-dd"), year = Number(formatInTimeZone(now, "America/New_York", "yyyy"));
+  const people = await db.select({ id: users.id, name: users.name }).from(users)
+    .where(and(eq(users.status, "active"), eq(users.birthday, md), or(isNull(users.birthdayPostedYear), ne(users.birthdayPostedYear, year))));
+  if (!people.length) return 0;
+  const team = await ensureTeamConversation();
+  let n = 0;
+  for (const p of people) {
+    const claimed = await db.update(users).set({ birthdayPostedYear: year }).where(and(eq(users.id, p.id), or(isNull(users.birthdayPostedYear), ne(users.birthdayPostedYear, year)))).returning({ id: users.id });
+    if (!claimed.length) continue;
+    await db.insert(messages).values({ conversationId: team.id, body: `🎂 Happy birthday, ${p.name.split(" ")[0]}! Throw them a paper plane today ✈️`, system: true });
+    await db.update(conversations).set({ lastMessageAt: new Date() }).where(eq(conversations.id, team.id));
+    n++;
   }
   return n;
 }

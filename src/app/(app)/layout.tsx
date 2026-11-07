@@ -10,6 +10,11 @@ import { MobileNav } from "@/components/shell/mobile-nav";
 import { UserMenu } from "@/components/shell/user-menu";
 import { NotificationBell } from "@/components/shell/notification-bell";
 import { unreadMessageTotal } from "@/server/chat";
+import { users } from "@/db/schema";
+import { SortingGate } from "@/components/academy/sorting";
+import { AcademyLive } from "@/components/academy/live";
+import { EffectsLayer } from "@/components/academy/effects";
+import { LogoTaps } from "@/components/academy/home-bits";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
@@ -19,7 +24,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     ? inArray(tasks.status, ["submitted", "under_review"])
     : and(inArray(tasks.status, ["submitted", "under_review"]), eq(tasks.reviewerId, user.id));
   // Independent lookups run at the same time instead of one after another.
-  const [s, [unread], [pendingReviews], [isReviewer], canDonations, pendingHours, unreadMessages] = await Promise.all([
+  const [s, [unread], [pendingReviews], [isReviewer], canDonations, pendingHours, unreadMessages, [me]] = await Promise.all([
     getSettings(),
     db.select({ n: count() }).from(notifications).where(and(eq(notifications.userId, user.id), isNull(notifications.readAt))),
     db.select({ n: count() }).from(tasks).where(reviewWhere),
@@ -27,7 +32,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     canManageDonations(user),
     user.role === "admin" ? db.execute(sql`select count(*)::int as n from volunteer_hours where status = 'pending'`).then((r) => Number((r as unknown as { n: number }[])[0]?.n ?? 0)) : Promise.resolve(0),
     unreadMessageTotal(user.id),
+    db.select({ cape: users.cape }).from(users).where(eq(users.id, user.id)),
   ]);
+  const academyOn = s.academy?.enabled ?? true;
   const canReview = user.role !== "volunteer" && isReviewer.n > 0;
   const badges = { notifications: unread.n, reviews: pendingReviews.n, messages: unreadMessages, hours: pendingHours };
 
@@ -36,15 +43,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[70] focus:rounded-lg focus:bg-surface focus:px-3 focus:py-2 focus:shadow-pop">Skip to content</a>
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col border-r border-line bg-surface md:flex">
-        <div className="flex h-16 items-center px-4"><Brand orgName={s.orgName} /></div>
-        <div className="scrollbar-thin flex-1 overflow-y-auto px-3 py-3"><NavList role={user.role} canReview={canReview} canDonations={canDonations} badges={badges} /></div>
+        <div className="flex h-16 items-center px-4"><LogoTaps><Brand orgName={s.orgName} /></LogoTaps></div>
+        <div className="scrollbar-thin flex-1 overflow-y-auto px-3 py-3"><NavList role={user.role} canReview={canReview} canDonations={canDonations} academy={academyOn} badges={badges} /></div>
         <div className="border-t border-line p-3"><UserMenu name={user.name} title={user.title} avatarFileId={user.avatarFileId} /></div>
       </aside>
 
       <div className="md:pl-[248px]">
         {/* Top bar */}
         <header className="sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b border-line bg-bg/85 px-4 backdrop-blur md:h-16 md:px-8">
-          <div className="md:hidden"><Brand orgName={s.orgName} /></div>
+          <div className="md:hidden"><LogoTaps><Brand orgName={s.orgName} /></LogoTaps></div>
           <div className="hidden text-sm text-muted md:block"><span className="italic">{s.tagline}</span></div>
           <div className="flex items-center gap-1.5">
             <NotificationBell count={unread.n} />
@@ -53,7 +60,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </header>
         <main id="main" className="mx-auto w-full max-w-[1240px] px-4 pt-6 pb-28 md:px-8 md:pt-8 md:pb-12">{children}</main>
       </div>
-      <MobileNav role={user.role} canReview={canReview} canDonations={canDonations} badges={badges} orgName={s.orgName} />
+      <MobileNav role={user.role} canReview={canReview} canDonations={canDonations} academy={academyOn} badges={badges} orgName={s.orgName} />
+      <EffectsLayer />
+      {academyOn && <AcademyLive userId={user.id} />}
+      {academyOn && !me?.cape && <SortingGate firstName={user.name.split(" ")[0]} />}
     </div>
   );
 }

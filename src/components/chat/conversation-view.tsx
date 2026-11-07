@@ -12,6 +12,8 @@ import { compressImage } from "@/lib/compress-image";
 import { deleteMessageAction, editMessageAction, reportMessageAction, sendMessageAction, markReadAction } from "@/server/chat-actions";
 import type { ChatMessage } from "@/server/chat";
 import { ChatInfo, type ChatInfoProps } from "./chat-info";
+import { spellOf } from "@/lib/academy";
+import { fireEffect } from "@/components/academy/effects";
 
 const URL_RE = /(https?:\/\/[^\s<]+[^\s<.,:;"')\]!?])/g;
 function Linkified({ text }: { text: string }) {
@@ -54,8 +56,16 @@ export function ConversationView({ me, header, initial, info, highlight }: {
   const toast = useToast();
   const router = useRouter();
 
+  const seen = useRef(new Set(initial.map((m) => m.id)));
   const merge = useCallback((incoming: ChatMessage[]) => {
     if (!incoming.length) return;
+    // Spells cast in the last 20 seconds play for everyone watching this chat.
+    for (const m of incoming) {
+      if (seen.current.has(m.id)) continue;
+      seen.current.add(m.id);
+      const sp = !m.deleted && !m.system ? spellOf(m.body) : null;
+      if (sp && Date.now() - Date.parse(m.createdAt) < 20000) fireEffect(sp.effect);
+    }
     setItems((prev) => {
       const map = new Map(prev.map((m) => [m.id, m]));
       for (const m of incoming) map.set(m.id, m);
@@ -172,6 +182,8 @@ export function ConversationView({ me, header, initial, info, highlight }: {
             {g.rows.map(({ m, first }) => {
               if (m.system) return <p key={m.id} id={`m-${m.id}`} className="my-2 text-center text-xs text-muted">{m.body} · {timeOf(m.createdAt)}</p>;
               const mine = m.authorId === me.id;
+              const spell = !m.deleted ? spellOf(m.body) : null;
+              if (spell) return <p key={m.id} id={`m-${m.id}`} className="my-2 text-center"><span className="inline-block rounded-full bg-accent-soft px-3 py-1 text-xs font-semibold text-accent-ink">✨ {mine ? "You" : m.authorName.split(" ")[0]} cast {spell.name} · {timeOf(m.createdAt)}</span></p>;
               return (
                 <div key={m.id} id={`m-${m.id}`} className={cn("group flex gap-2", mine ? "justify-end" : "justify-start", first ? "mt-3" : "mt-0.5")}>
                   {!mine && isGroupish && <div className="w-7 shrink-0">{first && <Avatar name={m.authorName} fileId={m.authorAvatar} size={28} />}</div>}
@@ -229,7 +241,7 @@ export function ConversationView({ me, header, initial, info, highlight }: {
             <button onClick={() => fileInput.current?.click()} className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-muted hover:bg-surface-2 hover:text-fg" aria-label="Add a photo"><ImagePlus className="h-5 w-5" /></button>
             <input ref={fileInput} type="file" accept="image/*" multiple className="sr-only" onChange={(e) => pickFiles(e.target.files)} />
             <label htmlFor="composer" className="sr-only">Message</label>
-            <textarea id="composer" rows={1} value={text} onChange={(e) => setText(e.target.value)} placeholder="Message"
+            <textarea id="composer" rows={1} value={text} onChange={(e) => setText(e.target.value)} placeholder="Message (try /confetti ✨)"
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !("ontouchstart" in window)) { e.preventDefault(); send(); } }}
               className="input max-h-36 min-h-10 flex-1 resize-none rounded-[20px] py-2.5" style={{ fieldSizing: "content" } as React.CSSProperties} />
             <button onClick={send} disabled={sending || (!text.trim() && !files.length)} aria-label="Send"

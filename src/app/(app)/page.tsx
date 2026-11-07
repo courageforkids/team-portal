@@ -10,6 +10,10 @@ import { db } from "@/db";
 import { announcementReads, announcements, events, notifications, pollVotes, polls, shoutoutRecipients, shoutouts, tasks, users } from "@/db/schema";
 import { badgeOf } from "@/lib/community";
 import { requireUser } from "@/server/auth";
+import { academySettings, birthdaysToday, currentSeason, standings, upcomingCountdowns } from "@/server/academy";
+import { CupBars } from "@/components/academy/cape-cup";
+import { ThrowPlaneButton } from "@/components/academy/throw-plane";
+import { HomeMagic } from "@/components/academy/home-bits";
 import { loadTasks } from "@/server/queries";
 import { allowedVisibilities, audienceMatches } from "@/server/policy";
 import { StatCard } from "@/components/ui/stat";
@@ -65,6 +69,13 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     db.select({ pollId: pollVotes.pollId }).from(pollVotes).where(eq(pollVotes.userId, me.id)),
     db.select({ s: shoutouts, from: users.name }).from(shoutouts).leftJoin(users, eq(users.id, shoutouts.fromId)).orderBy(desc(shoutouts.createdAt)).limit(1),
   ]);
+  const academy = await academySettings();
+  const [countdowns, bdays, season, teammates] = await Promise.all([
+    upcomingCountdowns(2), birthdaysToday(), academy.enabled ? currentSeason() : Promise.resolve(null),
+    academy.enabled ? db.select({ id: users.id, name: users.name, cape: users.cape }).from(users).where(eq(users.status, "active")).orderBy(users.name) : Promise.resolve([]),
+  ]);
+  const board = season ? await standings(season, academy.capeCount) : null;
+  const myCape = teammates.find((t) => t.id === me.id)?.cape ?? null;
   const votedIds = new Set(myVotes.map((v) => v.pollId));
   const pollsToVote = openPolls.filter((p) => !p.closedAt && !(p.closesAt && p.closesAt <= now) && !votedIds.has(p.id) && audienceMatches(p.audience, me));
   const shout = latestShout[0];
@@ -129,6 +140,40 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           <span className="min-w-0 flex-1"><b className="text-fg">Vote:</b> <span className="text-fg-2">{pollsToVote[0].question}</span>{pollsToVote.length > 1 && <span className="text-muted"> (+{pollsToVote.length - 1} more)</span>}</span>
           <ArrowRight className="h-4 w-4 shrink-0 text-brand-ink" />
         </Link>
+      )}
+
+      <HomeMagic myBirthday={bdays.some((b) => b.id === me.id)} year={Number(formatInTimeZone(now, tz, "yyyy"))} />
+      {bdays.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-accent/60 bg-accent-soft px-4 py-3 text-sm">
+          <span className="text-2xl" aria-hidden>🎂</span>
+          <span className="min-w-0 flex-1">{bdays.some((b) => b.id === me.id) ? <b className="text-fg">Happy birthday, {firstName}! The whole team is cheering for you today.</b>
+            : <><b className="text-fg">It&apos;s {bdays.map((b) => b.name.split(" ")[0]).join(" & ")}&apos;s birthday!</b> <span className="text-fg-2">Throw them a paper plane.</span></>}</span>
+          {academy.enabled && !bdays.some((b) => b.id === me.id) && <ThrowPlaneButton people={teammates.filter((t) => t.id !== me.id)} defaultTo={bdays[0].id} label="Send a plane" />}
+        </div>
+      )}
+      {countdowns.length > 0 && (
+        <section aria-label="Countdowns" className="grid gap-3 sm:grid-cols-2">
+          {countdowns.map((c) => (
+            <Link key={c.id} href={`/volunteer/events/${c.id}`} className="focus-ring flex items-center gap-4 rounded-xl border border-line bg-surface px-4 py-3 shadow-soft transition hover:border-line-strong">
+              <div className="grid h-14 w-14 shrink-0 place-items-center rounded-xl bg-brand text-brand-fg"><div className="text-center leading-none"><div className="text-xl font-extrabold tabular-nums">{c.days}</div><div className="text-[10px] font-semibold uppercase">{c.days === 1 ? "day" : "days"}</div></div></div>
+              <div className="min-w-0 flex-1">
+                <div className="line-clamp-2 font-semibold leading-snug">{c.days === 0 ? `${c.title} is today!` : `${c.title} in ${c.days} day${c.days === 1 ? "" : "s"}`}</div>
+                {c.capacity > 0 ? (
+                  <div className="mt-1.5"><div className="h-1.5 overflow-hidden rounded-full bg-surface-2"><div className="h-full rounded-full bg-accent" style={{ width: `${Math.min(100, (c.filled / c.capacity) * 100)}%` }} /></div><div className="mt-1 text-xs text-muted">{c.filled} of {c.capacity} volunteer spots filled</div></div>
+                ) : <div className="text-xs text-muted">{c.filled ? `${c.filled} signed up` : formatInTimeZone(c.startsAt, tz, "EEE, MMM d")}</div>}
+              </div>
+            </Link>
+          ))}
+        </section>
+      )}
+      {academy.enabled && (
+        <Card>
+          <CardHeader title="🏆 The Cape Cup" description={season ? season.name : "Courage Academy"} action={<Link href="/academy" className="text-sm font-semibold text-brand-ink hover:underline">Academy</Link>} />
+          <div className="grid gap-4 px-5 pb-5 sm:grid-cols-[1fr_auto] sm:items-end">
+            {board ? <CupBars list={board} myCape={myCape} /> : <p className="text-sm text-muted">The next season starts soon. Earn points by finishing tasks on time, showing up, and cheering on teammates.</p>}
+            <ThrowPlaneButton people={teammates.filter((t) => t.id !== me.id)} />
+          </div>
+        </Card>
       )}
 
       {exec && (
