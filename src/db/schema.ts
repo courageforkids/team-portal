@@ -50,9 +50,6 @@ export const users = pgTable("users", {
   notificationPrefs: jsonb("notification_prefs").$type<NotificationPrefs>().notNull().default({}),
   calendarToken: text("calendar_token"),
   onboardedAt: timestamp("onboarded_at", { withTimezone: true }),
-  /** Courage Academy team, set by the Sorting. */
-  cape: text("cape"),
-  sortedAt: timestamp("sorted_at", { withTimezone: true }),
   /** "MM-DD" only — no year. */
   birthday: text("birthday"),
   birthdayPostedYear: integer("birthday_posted_year"),
@@ -409,8 +406,6 @@ export type OrgSettings = {
   lastMaintenanceAt?: string;
   /** Members besides admins who can log donations and make receipts. */
   donationManagerIds?: string[];
-  /** Courage Academy (Sorting, Cape Cup, paper planes…). */
-  academy?: { enabled: boolean; capeCount: 2 | 4; goals: { id: string; label: string; metric: "boxes" | "money" | "manual"; target: number; current?: number; year: number }[] };
   /** Printed on donation receipts. */
   receiptAddress?: string;
   receiptSignerName?: string;
@@ -673,34 +668,3 @@ export const donations = pgTable("donations", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("donations_donor_idx").on(t.donorId), index("donations_received_idx").on(t.receivedOn)]);
 
-/* ───────────── Courage Academy ───────────── */
-
-export const capeSeasons = pgTable("cape_seasons", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  startsOn: date("starts_on").notNull(),
-  endsOn: date("ends_on").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-/** Extra points from an admin, to one person or to a whole Cape. */
-export const capeBonuses = pgTable("cape_bonuses", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
-  cape: text("cape"),
-  points: integer("points").notNull(),
-  reason: text("reason").notNull().default(""),
-  createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-export const paperPlanes = pgTable("paper_planes", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  fromId: uuid("from_id").references(() => users.id, { onDelete: "set null" }),
-  toId: uuid("to_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  style: text("style").notNull().default("thanks"),
-  message: text("message").notNull(),
-  seenAt: timestamp("seen_at", { withTimezone: true }),
-  reportedAt: timestamp("reported_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [index("paper_planes_to_idx").on(t.toId, t.createdAt), index("paper_planes_from_idx").on(t.fromId, t.createdAt)]);

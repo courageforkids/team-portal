@@ -1,6 +1,6 @@
 "use client";
 import { ActionForm, Field, Select, SubmitButton } from "@/components/ui/form";
-import { saveBirthdayAction } from "@/server/academy-actions";
+import { saveBirthdayAction } from "@/server/birthday-actions";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 

@@ -160,7 +160,7 @@ export async function postBirthdays(now = new Date()) {
   for (const p of people) {
     const claimed = await db.update(users).set({ birthdayPostedYear: year }).where(and(eq(users.id, p.id), or(isNull(users.birthdayPostedYear), ne(users.birthdayPostedYear, year)))).returning({ id: users.id });
     if (!claimed.length) continue;
-    await db.insert(messages).values({ conversationId: team.id, body: `🎂 Happy birthday, ${p.name.split(" ")[0]}! Throw them a paper plane today ✈️`, system: true });
+    await db.insert(messages).values({ conversationId: team.id, body: `🎂 Happy birthday, ${p.name.split(" ")[0]}! Send them some love today 🎉`, system: true });
     await db.update(conversations).set({ lastMessageAt: new Date() }).where(eq(conversations.id, team.id));
     n++;
   }

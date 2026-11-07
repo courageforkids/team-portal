@@ -13,7 +13,7 @@ import { ROLE_LABEL } from "@/lib/task-meta";
 import { appUrl } from "@/server/email";
 import { vapidPublicKey } from "@/server/push";
 import { PushToggle } from "@/components/home/push-toggle";
-import { BirthdayForm } from "@/components/academy/birthday-form";
+import { BirthdayForm } from "@/components/home/birthday-form";
 
 export const metadata = { title: "Profile & preferences" };
 
