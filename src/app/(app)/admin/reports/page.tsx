@@ -8,6 +8,7 @@ import { buttonClass } from "@/components/ui/button";
 import { ReportForm } from "@/components/admin/report-form";
 import { fmtDate } from "@/lib/dates";
 import { EVENT_TYPE_LABEL } from "@/lib/task-meta";
+import { fmtMoney } from "@/lib/money";
 
 export const metadata = { title: "Monthly report" };
 
@@ -38,7 +39,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               <Stat label="Boxes delivered" value={r.manual?.boxesDelivered ?? "—"} />
               <Stat label="Hospitals served" value={r.manual?.hospitalsServed ?? "—"} />
-              <Stat label="Money raised" value={r.manual?.moneyRaised || "—"} />
+              <Stat label="Money raised" value={r.manual?.moneyRaised || (r.donations.cents ? fmtMoney(r.donations.cents) : "—")} hint={r.donations.count ? `${fmtMoney(r.donations.cents)} logged in Donations (${r.donations.count})` : undefined} />
             </div>
           </Card>
           <Card className="p-5">

@@ -1,3 +1,4 @@
+import { cashBetween } from "./donations";
 import "server-only";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 import { addMonths } from "date-fns";
@@ -57,6 +58,7 @@ export async function monthlyReport(month: string) {
     volunteer: { hours: Math.round((Number(hoursRows[0]?.minutes ?? 0) / 60) * 10) / 10, volunteers: Number(hoursRows[0]?.people ?? 0), shifts: shiftRows.length, signups: signupRows.length, attended: signupRows.filter((s) => s.attended).length },
     events: eventRows,
     meetings: { count: meetingRows.length, avgAttendance: presentPerMeeting.length ? Math.round((presentPerMeeting.reduce((a, b) => a + b, 0) / presentPerMeeting.length) * 10) / 10 : null },
+    donations: await cashBetween(dayStart, dayEnd),
     engagement: { announcements: n(annCount), messages: n(msgCount), polls: n(pollCount), shoutouts: n(shoutCount) },
     manual: manual[0] ?? null,
   };

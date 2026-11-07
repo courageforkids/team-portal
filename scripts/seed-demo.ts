@@ -13,7 +13,7 @@ const H = 3600_000, D = 24 * H;
 async function main() {
   if (process.env.NODE_ENV === "production" && !process.env.ALLOW_DEMO_SEED) throw new Error("Refusing to seed demo data in production.");
   const { db, close } = connect();
-  await db.execute(sql`truncate table shoutout_cheers, shoutout_recipients, shoutouts, poll_votes, polls, meeting_attendance, meetings, api_keys, volunteer_hours, shift_signups, event_shifts, messages, conversation_members, conversations, push_subscriptions, audit_log, notifications, email_outbox, announcement_reads, announcements, events, resources,
+  await db.execute(sql`truncate table donations, donors, monthly_reports, shoutout_cheers, shoutout_recipients, shoutouts, poll_votes, polls, meeting_attendance, meetings, api_keys, volunteer_hours, shift_signups, event_shifts, messages, conversation_members, conversations, push_subscriptions, audit_log, notifications, email_outbox, announcement_reads, announcements, events, resources,
     accountability_records, extension_requests, task_events, task_comments, reviews, submissions, task_assignees, tasks, task_series,
     milestones, projects, files, task_categories, password_resets, invitations, sessions, rate_limits, users, departments, settings cascade`);
 
@@ -143,6 +143,19 @@ async function main() {
   const [so] = await db.insert(s.shoutouts).values({ fromId: U.jacob, badge: "above", message: "Arleigh made the holiday graphics in one night. They look amazing!", createdAt: new Date(now - 3 * H) }).returning();
   await db.insert(s.shoutoutRecipients).values({ shoutoutId: so.id, userId: U.arleigh });
   await db.insert(s.shoutoutCheers).values([{ shoutoutId: so.id, userId: U.julia }, { shoutoutId: so.id, userId: U.owen }]);
+
+  // Donations: a few sample gifts (fake donors).
+  const yr = new Date().getFullYear();
+  const [d1, d2, d3] = await db.insert(s.donors).values([
+    { name: "Sample Family", kind: "individual" as const, address: "123 Example St\nSpartanburg, SC 29301", createdById: U.jacob },
+    { name: "Example Coffee Co.", kind: "business" as const, createdById: U.jacob },
+    { name: "Demo Elementary PTA", kind: "school" as const, createdById: U.jacob },
+  ]).returning();
+  await db.insert(s.donations).values([
+    { donorId: d1.id, receivedOn: `${yr}-01-15`, type: "cash" as const, amountCents: 30000, method: "Check", receiptNumber: `${yr}-0001`, createdById: U.jacob },
+    { donorId: d2.id, receivedOn: `${yr}-03-02`, type: "in_kind" as const, description: "40 coloring books and 10 boxes of crayons", receiptNumber: `${yr}-0002`, createdById: U.jacob },
+    { donorId: d3.id, receivedOn: `${yr}-04-20`, type: "cash" as const, amountCents: 15000, method: "Online", goodsProvided: true, goodsDescription: "2 event tickets", goodsValueCents: 2000, receiptNumber: `${yr}-0003`, createdById: U.jacob },
+  ]);
 
   // Chat: team chat, one work pair with a shared task, and a direct message.
   const [team] = await db.insert(s.conversations).values({ kind: "team", title: "Everyone", description: "The whole Courage for Kids team.", lastMessageAt: new Date(now - 20 * 60_000) }).returning();

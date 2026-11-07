@@ -1,3 +1,4 @@
+import { canManageDonations } from "@/server/donations";
 import { and, count, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { notifications, tasks } from "@/db/schema";
@@ -21,6 +22,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const [pendingReviews] = await db.select({ n: count() }).from(tasks).where(reviewWhere);
   const [isReviewer] = user.role === "admin" ? [{ n: 1 }] : await db.select({ n: count() }).from(tasks).where(eq(tasks.reviewerId, user.id));
   const canReview = user.role !== "volunteer" && isReviewer.n > 0;
+  const canDonations = await canManageDonations(user);
   const pendingHours = user.role === "admin" ? Number(((await db.execute(sql`select count(*)::int as n from volunteer_hours where status = 'pending'`)) as unknown as { n: number }[])[0]?.n ?? 0) : 0;
   const badges = { notifications: unread.n, reviews: pendingReviews.n, messages: await unreadMessageTotal(user.id), hours: pendingHours };
 
@@ -30,7 +32,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col border-r border-line bg-surface md:flex">
         <div className="flex h-16 items-center px-4"><Brand orgName={s.orgName} /></div>
-        <div className="scrollbar-thin flex-1 overflow-y-auto px-3 py-3"><NavList role={user.role} canReview={canReview} badges={badges} /></div>
+        <div className="scrollbar-thin flex-1 overflow-y-auto px-3 py-3"><NavList role={user.role} canReview={canReview} canDonations={canDonations} badges={badges} /></div>
         <div className="border-t border-line p-3"><UserMenu name={user.name} title={user.title} avatarFileId={user.avatarFileId} /></div>
       </aside>
 
@@ -46,7 +48,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </header>
         <main id="main" className="mx-auto w-full max-w-[1240px] px-4 pt-6 pb-28 md:px-8 md:pt-8 md:pb-12">{children}</main>
       </div>
-      <MobileNav role={user.role} canReview={canReview} badges={badges} orgName={s.orgName} />
+      <MobileNav role={user.role} canReview={canReview} canDonations={canDonations} badges={badges} orgName={s.orgName} />
     </div>
   );
 }

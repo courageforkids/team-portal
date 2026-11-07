@@ -64,6 +64,13 @@
       "when": 1794017799399,
       "tag": "0008_drop_onboarding",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794023614845,
+      "tag": "0009_donations",
+      "breakpoints": true
     }
   ]
 }

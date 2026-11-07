@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/server/auth";
 import { currentMonth, monthlyReport } from "@/server/reports";
 import { audit } from "@/server/audit";
 import { EVENT_TYPE_LABEL } from "@/lib/task-meta";
+import { fmtMoney } from "@/lib/money";
 
 const NAVY = rgb(0, 79 / 255, 129 / 255), YELLOW = rgb(254 / 255, 212 / 255, 56 / 255), INK = rgb(0.13, 0.15, 0.2), GRAY = rgb(0.42, 0.45, 0.5), LINE = rgb(0.87, 0.89, 0.92);
 
@@ -60,7 +61,7 @@ export async function GET(req: Request) {
   const para = (t: string) => { for (const line of wrap(t, font, 10.5, W - 2 * M)) { ensure(15); page.drawText(line, { x: M, y, size: 10.5, font, color: INK }); y -= 15; } y -= 6; };
 
   heading("Impact");
-  tiles([["Boxes delivered", String(r.manual?.boxesDelivered ?? "-")], ["Hospitals served", String(r.manual?.hospitalsServed ?? "-")], ["Money raised", (r.manual?.moneyRaised || "-").replace(/[^\x20-\x7E]/g, "")]]);
+  tiles([["Boxes delivered", String(r.manual?.boxesDelivered ?? "-")], ["Hospitals served", String(r.manual?.hospitalsServed ?? "-")], ["Money raised", (r.manual?.moneyRaised || (r.donations.cents ? fmtMoney(r.donations.cents) : "-")).replace(/[^\x20-\x7E]/g, "")]]);
   heading("Team");
   tiles([
     ["Volunteer hours", String(r.volunteer.hours), `${r.volunteer.volunteers} people`],

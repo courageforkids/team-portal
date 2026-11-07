@@ -9,7 +9,7 @@ export function ReportForm({ month, v }: { month: string; v: { highlights: strin
       <div className="grid gap-3 sm:grid-cols-3">
         <Field label="Boxes delivered" htmlFor="r-boxes"><Input id="r-boxes" name="boxesDelivered" type="number" min={0} defaultValue={v?.boxesDelivered ?? ""} /></Field>
         <Field label="Hospitals served" htmlFor="r-hosp"><Input id="r-hosp" name="hospitalsServed" type="number" min={0} defaultValue={v?.hospitalsServed ?? ""} /></Field>
-        <Field label="Money raised" htmlFor="r-money" hint="e.g. $450"><Input id="r-money" name="moneyRaised" defaultValue={v?.moneyRaised ?? ""} maxLength={60} /></Field>
+        <Field label="Money raised" htmlFor="r-money" hint="Leave blank to use gifts logged in Donations"><Input id="r-money" name="moneyRaised" defaultValue={v?.moneyRaised ?? ""} maxLength={60} /></Field>
       </div>
       <Field label="Highlights" htmlFor="r-hi" hint="Wins this month, one per line."><Textarea id="r-hi" name="highlights" rows={4} defaultValue={v?.highlights} /></Field>
       <Field label="Challenges" htmlFor="r-ch" hint="Optional"><Textarea id="r-ch" name="challenges" rows={3} defaultValue={v?.challenges} /></Field>

@@ -25,6 +25,7 @@ For trusted automation (e.g. Claude) acting on behalf of an Executive Administra
 | POST | `/api/v1/events/:id/shifts` | `{ label, startsAt, endsAt, capacity?, notes? }` |
 | GET/POST | `/api/v1/meetings` | `{ title, startsAt, agenda?, visibility? }` or `{ event: "<calendar event id>", agenda? }` (reuses that event's meeting page) |
 | GET/POST | `/api/v1/polls` | `{ question, options: ["A","B"], description?, closesAt?, roles?: ["leader"], multiple?, anonymous?, showResults?: always\|after_vote\|after_close }`. Notifies the audience. |
+| GET/POST | `/api/v1/donations` | `{ donor: "Smith Family", receivedOn?: "2026-11-07", type?: cash\|in_kind\|other, amount?: 50, method?: "Check", description?, goodsReceived?: "2 tickets", goodsValue?: 20 }`. Creates the donor if new and returns the receipt number and link. GET `?year=2026` lists gifts and totals. Private: never share amounts outside the portal. |
 | GET/POST | `/api/v1/resources` | `{ title, kind?: note\|link, body? (note), url? (link), category?, description?, visibility?, pinned? }` |
 
 Example:

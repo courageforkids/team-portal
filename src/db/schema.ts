@@ -401,6 +401,12 @@ export type OrgSettings = {
   quietHoursEnd?: number;
   timezone: string;
   lastMaintenanceAt?: string;
+  /** Members besides admins who can log donations and make receipts. */
+  donationManagerIds?: string[];
+  /** Printed on donation receipts. */
+  receiptAddress?: string;
+  receiptSignerName?: string;
+  receiptSignerTitle?: string;
 };
 
 export const settings = pgTable("settings", {
@@ -618,3 +624,43 @@ export const monthlyReports = pgTable("monthly_reports", {
   updatedById: uuid("updated_by_id").references(() => users.id, { onDelete: "set null" }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/* ───────────── Donations ───────────── */
+
+export const donorKindEnum = pgEnum("donor_kind", ["individual", "business", "foundation", "school", "church", "other"]);
+/** cash = money (cash, check, card, online); in_kind = donated items; other = stock, donor-advised fund, vehicle, services, crypto… (acknowledged without tax wording). */
+export const giftTypeEnum = pgEnum("gift_type", ["cash", "in_kind", "other"]);
+
+export const donors = pgTable("donors", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  kind: donorKindEnum("kind").notNull().default("individual"),
+  email: text("email").notNull().default(""),
+  phone: text("phone").notNull().default(""),
+  address: text("address").notNull().default(""),
+  notes: text("notes").notNull().default(""),
+  createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("donors_name_idx").on(t.name)]);
+
+export const donations = pgTable("donations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  donorId: uuid("donor_id").notNull().references(() => donors.id, { onDelete: "restrict" }),
+  receivedOn: date("received_on").notNull(),
+  type: giftTypeEnum("type").notNull().default("cash"),
+  /** Cash gifts only, in cents. In-kind gifts never get a value from us. */
+  amountCents: integer("amount_cents"),
+  method: text("method").notNull().default(""),
+  /** What was given (in-kind / other), or an optional note for cash. */
+  description: text("description").notNull().default(""),
+  goodsProvided: boolean("goods_provided").notNull().default(false),
+  goodsDescription: text("goods_description").notNull().default(""),
+  goodsValueCents: integer("goods_value_cents"),
+  eventId: uuid("event_id").references(() => events.id, { onDelete: "set null" }),
+  receiptNumber: text("receipt_number").notNull().unique(),
+  notes: text("notes").notNull().default(""),
+  createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("donations_donor_idx").on(t.donorId), index("donations_received_idx").on(t.receivedOn)]);

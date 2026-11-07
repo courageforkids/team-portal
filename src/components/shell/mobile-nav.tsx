@@ -7,7 +7,7 @@ import { cn } from "@/lib/cn";
 import { isActive, NavList, Brand } from "./sidebar";
 import { ThemeToggle } from "./theme-toggle";
 
-export function MobileNav({ role, canReview, badges, orgName }: { role: "admin" | "leader" | "volunteer"; canReview: boolean; badges: Record<string, number>; orgName: string }) {
+export function MobileNav({ role, canReview, canDonations = false, badges, orgName }: { role: "admin" | "leader" | "volunteer"; canReview: boolean; canDonations?: boolean; badges: Record<string, number>; orgName: string }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   useEffect(() => setOpen(false), [pathname]);
@@ -45,7 +45,7 @@ export function MobileNav({ role, canReview, badges, orgName }: { role: "admin" 
           <div className="animate-in pb-safe absolute inset-x-0 bottom-0 max-h-[88dvh] overflow-y-auto rounded-t-2xl border-t border-line bg-surface p-4">
             <div className="mb-4 flex items-center justify-between"><Brand orgName={orgName} />
               <button onClick={() => setOpen(false)} aria-label="Close menu" className="rounded-lg p-2 text-muted hover:bg-surface-2"><X className="h-5 w-5" /></button></div>
-            <NavList role={role} canReview={canReview} badges={badges} onNavigate={() => setOpen(false)} />
+            <NavList role={role} canReview={canReview} canDonations={canDonations} badges={badges} onNavigate={() => setOpen(false)} />
             <div className="mt-5 border-t border-line pt-4"><div className="eyebrow mb-2">Appearance</div><ThemeToggle /></div>
           </div>
         </div>
