@@ -165,3 +165,24 @@ test("drafts can be edited before publishing", async ({ browser, request }) => {
   await toast(admin.page, /Published 1 draft/);
   await expect.poll(async () => (await sql`select options from polls where question = ${"Poll " + t}`)[0]?.options?.length).toBe(3);
 });
+
+test("the first task to someone opens a direct chat with them, only once", async ({ browser, request }) => {
+  const admin = await as(browser, "jacob");
+  await admin.page.goto("/settings/api-keys");
+  await admin.page.fill("#ak-name", "E2E dm");
+  await admin.page.getByRole("button", { name: "Create key" }).click();
+  const key = await admin.page.getByTestId("copy-value").inputValue();
+  const [j] = await sql`select id from users where email = 'jacob@demo.cfk.test'`;
+  const [d] = await sql`select id from users where email = 'dominik@demo.cfk.test'`;
+  const dmKey = [j.id, d.id].sort().join(":");
+  await sql`delete from conversations where dm_key = ${dmKey}`;
+  for (const n of [1, 2]) {
+    const r = await request.post("/api/v1/tasks", { headers: { Authorization: `Bearer ${key}` }, data: { title: `DM test task ${n} ${Date.now()}`, assignees: ["Dominik"] } });
+    expect(r.status(), await r.text()).toBe(200);
+  }
+  const convs = await sql`select id from conversations where dm_key = ${dmKey}`;
+  expect(convs).toHaveLength(1);
+  const msgs = await sql`select body from messages where conversation_id = ${convs[0].id}`;
+  expect(msgs).toHaveLength(1);
+  expect(msgs[0].body).toContain("first task");
+});

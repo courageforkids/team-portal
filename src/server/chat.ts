@@ -149,3 +149,14 @@ export async function workGroupsLite() {
     .where(and(eq(conversations.kind, "workgroup"), eq(conversations.archived, false))).orderBy(asc(conversations.title));
 }
 
+
+/** Finds the one direct chat between two people, creating it if it doesn't exist yet. */
+export async function ensureDm(a: string, b: string) {
+  const key = dmKeyFor(a, b);
+  const existing = (await db.select().from(conversations).where(eq(conversations.dmKey, key)).limit(1))[0];
+  if (existing) return { conv: existing, created: false };
+  const [made] = await db.insert(conversations).values({ kind: "dm", dmKey: key, createdById: a }).onConflictDoNothing().returning();
+  const conv = made ?? (await db.select().from(conversations).where(eq(conversations.dmKey, key)).limit(1))[0];
+  await db.insert(conversationMembers).values([{ conversationId: conv.id, userId: a }, { conversationId: conv.id, userId: b }]).onConflictDoNothing();
+  return { conv, created: !!made };
+}

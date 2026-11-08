@@ -1,3 +1,4 @@
+import { addSystemMessage, ensureDm } from "./chat";
 import "server-only";
 import { and, desc, eq, inArray, max } from "drizzle-orm";
 import { db } from "@/db";
@@ -55,6 +56,15 @@ export async function createTasks(actor: CurrentUser | null, input: TaskInput, a
     created.push(t.id);
   }
   if (actor) await audit(actor.id, "task.create", "task", created.join(","), { title: input.title, assignees: ids, separate: opts.separate });
+  // The first time someone gets a task from this person, open a direct chat between them (only once, ever).
+  if (actor) {
+    for (const uid of ids.filter((i) => i !== actor.id)) {
+      try {
+        const { conv, created: isNew } = await ensureDm(actor.id, uid);
+        if (isNew) await addSystemMessage(conv.id, `${actor.name.split(" ")[0]} started this chat when assigning your first task. Questions about an assignment? Ask here.`);
+      } catch (e) { console.error("couldn't open task chat", e); }
+    }
+  }
   return created;
 }
 
