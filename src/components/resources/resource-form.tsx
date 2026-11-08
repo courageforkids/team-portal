@@ -96,6 +96,7 @@ export function ResourceFormDialog({ resource, categories, accept, defaultCatego
           <Checkbox name="pinned" checked={pinned} onChange={(e) => setPinned(e.target.checked)} label="Pin to the top" description="Pinned resources appear first for everyone who can see them." />
           <div className="flex flex-col-reverse gap-2 border-t border-line pt-4 sm:flex-row sm:justify-end">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
+            {!r && <SubmitButton name="intent" value="draft" variant="secondary" pendingText="Saving…">Save as draft</SubmitButton>}
             <SubmitButton pendingText="Saving…">{r ? "Save changes" : "Add resource"}</SubmitButton>
           </div>
         </ActionForm>

@@ -8,8 +8,8 @@ import { navFor } from "./nav-config";
 
 export function isActive(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
-  if (href === "/tasks") return pathname === "/tasks" || (pathname.startsWith("/tasks/") && !pathname.startsWith("/tasks/all") && pathname !== "/tasks/new" && pathname !== "/tasks/drafts");
-  if (href === "/tasks/all") return pathname.startsWith("/tasks/all") || pathname === "/tasks/new" || pathname === "/tasks/drafts";
+  if (href === "/tasks") return pathname === "/tasks" || (pathname.startsWith("/tasks/") && !pathname.startsWith("/tasks/all") && pathname !== "/tasks/new");
+  if (href === "/tasks/all") return pathname.startsWith("/tasks/all") || pathname === "/tasks/new";
   if (href === "/admin") return pathname === "/admin" || pathname.startsWith("/admin/members");
   if (href === "/admin/reports") return pathname.startsWith("/admin/reports");
   return pathname === href || pathname.startsWith(href + "/");

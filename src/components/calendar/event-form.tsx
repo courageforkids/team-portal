@@ -89,6 +89,7 @@ export function EventForm({ initial, defaultDate, projects, tz, tzName, onDone, 
       )}
       <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
         <Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button>
+        {!initial && <SubmitButton name="intent" value="draft" variant="secondary" pendingText="Saving…">Save as draft</SubmitButton>}
         <SubmitButton pendingText="Saving…">{initial ? "Save changes" : "Add event"}</SubmitButton>
       </div>
     </ActionForm>

@@ -1,5 +1,6 @@
 "use server";
 import { randomUUID } from "node:crypto";
+import { isDraftIntent, saveFormDraft } from "@/server/drafts";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
@@ -48,6 +49,8 @@ async function removeFile(fileId: string | null) {
 
 export async function createResource(_: unknown, fd: FormData): Promise<ActionResult> {
   return safe(async () => {
+    // "Save as draft": store it privately instead (admins only); publishing later runs this same action.
+    if (isDraftIntent(fd) && !fd.get("id")) return saveFormDraft("resource", fd, String(fd.get("title") ?? "")) as Promise<never>;
     const me = await actionAdmin();
     const input = read(fd);
     const id = randomUUID();

@@ -1,5 +1,6 @@
 "use server";
 import { and, eq, inArray, isNull } from "drizzle-orm";
+import { isDraftIntent, saveFormDraft } from "@/server/drafts";
 import { z } from "zod";
 import { db } from "@/db";
 import { announcementReads, announcements, departments, files, type Audience } from "@/db/schema";
@@ -39,6 +40,8 @@ async function readAudience(fd: FormData): Promise<Audience> {
 
 export async function saveAnnouncementAction(_prev: ActionResult<unknown> | null, fd: FormData): Promise<ActionResult> {
   return safe(async () => {
+    // "Save as draft": store it privately instead (admins only); publishing later runs this same action.
+    if (isDraftIntent(fd) && !fd.get("id")) return saveFormDraft("announcement", fd, String(fd.get("title") ?? "")) as Promise<never>;
     const me = await actionAdmin();
     const id = str(fd, "id");
     const input = schema.parse({ title: str(fd, "title"), body: str(fd, "body"), category: str(fd, "category") });

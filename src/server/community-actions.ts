@@ -1,5 +1,6 @@
 "use server";
 import { and, eq, inArray } from "drizzle-orm";
+import { isDraftIntent, saveFormDraft } from "@/server/drafts";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { db } from "@/db";
@@ -20,6 +21,8 @@ const uuid = z.string().uuid();
 
 export async function createPollAction(_: unknown, fd: FormData): Promise<ActionResult> {
   return safe(async () => {
+    // "Save as draft": store it privately instead (admins only); publishing later runs this same action.
+    if (isDraftIntent(fd) && !fd.get("id")) return saveFormDraft("poll", fd, str(fd, "question")) as Promise<never>;
     const me = await actionUser();
     if (me.role === "volunteer") throw new AuthError("Only leaders and administrators can create polls.");
     const question = str(fd, "question").slice(0, 200);

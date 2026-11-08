@@ -6,7 +6,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { ActionForm, Checkbox, Field, Input, Select, SubmitButton } from "@/components/ui/form";
 import { createPollAction } from "@/server/community-actions";
 
-export function NewPollButton() {
+export function NewPollButton({ canDraft = false }: { canDraft?: boolean }) {
   const [open, setOpen] = useState(false);
   const [opts, setOpts] = useState(["", ""]);
   return (
@@ -36,7 +36,7 @@ export function NewPollButton() {
             <p className="hint">Leave all unchecked for everyone.</p>
           </fieldset>
           <div className="space-y-1"><Checkbox name="multiple" label="Let people pick more than one" /><Checkbox name="anonymous" label="Anonymous" description="Nobody sees who voted for what, including admins." /></div>
-          <div className="flex justify-end"><SubmitButton>Post poll</SubmitButton></div>
+          <div className="flex justify-end gap-2">{canDraft && <SubmitButton name="intent" value="draft" variant="secondary" pendingText="Saving…">Save as draft</SubmitButton>}<SubmitButton>Post poll</SubmitButton></div>
         </ActionForm>
       </Dialog>
     </>

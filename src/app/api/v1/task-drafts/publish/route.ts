@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { taskDrafts } from "@/db/schema";
 import { apiRoute, ApiError, jsonBody } from "@/server/api-auth";
-import { publishDrafts } from "@/server/task-drafts";
+import { publishDrafts } from "@/server/drafts";
 
 /** { ids: [...] } or { batch: "Week of Nov 9" }. Notifies assignees. */
 export const POST = apiRoute(async (req, actor) => {

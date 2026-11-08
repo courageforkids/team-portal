@@ -37,7 +37,7 @@ export default async function PollsPage() {
   const openPolls = views.filter((v) => v.open), closed = views.filter((v) => !v.open);
   return (
     <>
-      <PageHeader title="Polls" description="Quick team votes: pick a date, choose a design, decide together." actions={me.role !== "volunteer" && <NewPollButton />} />
+      <PageHeader title="Polls" description="Quick team votes: pick a date, choose a design, decide together." actions={me.role !== "volunteer" && <NewPollButton canDraft={me.role === "admin"} />} />
       {views.length === 0 && <div className="card"><EmptyState icon={Vote} title="No polls yet">{me.role !== "volunteer" ? "Ask the team something, like which day works for packing." : "When there's a team vote, it'll show up here."}</EmptyState></div>}
       <div className="grid gap-4 lg:grid-cols-2">{openPolls.map((p) => <PollCard key={p.id} p={p} />)}</div>
       {closed.length > 0 && <><h2 className="eyebrow mb-3 mt-8">Closed</h2><div className="grid gap-4 lg:grid-cols-2">{closed.map((p) => <PollCard key={p.id} p={p} />)}</div></>}

@@ -1,5 +1,6 @@
 "use server";
 import { and, eq } from "drizzle-orm";
+import { isDraftIntent, saveFormDraft } from "@/server/drafts";
 import { z } from "zod";
 import { db } from "@/db";
 import { events, meetingAttendance, meetings, users } from "@/db/schema";
@@ -17,6 +18,8 @@ const canEdit = (role: string) => role === "admin" || role === "leader";
 
 export async function createMeetingAction(_: unknown, fd: FormData): Promise<ActionResult<{ id: string }>> {
   return safe(async () => {
+    // "Save as draft": store it privately instead (admins only); publishing later runs this same action.
+    if (isDraftIntent(fd) && !fd.get("id")) return saveFormDraft("meeting", fd, str(fd, "title")) as Promise<never>;
     const me = await actionUser();
     if (!canEdit(me.role)) throw new AuthError("Only leaders and administrators can create meeting pages.");
     const title = str(fd, "title").slice(0, 120);

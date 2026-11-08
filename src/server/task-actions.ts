@@ -1,5 +1,6 @@
 "use server";
 import { and, eq } from "drizzle-orm";
+import { isDraftIntent, saveFormDraft } from "@/server/drafts";
 import { z } from "zod";
 import { db } from "@/db";
 import { extensionRequests, taskComments, taskSeries, tasks, type ChecklistItem, type LinkItem, type SubmissionType, type ChecklistState } from "@/db/schema";
@@ -60,6 +61,8 @@ function readTaskForm(fd: FormData): { input: TaskInput; assignees: string[] } {
 
 export async function createTaskAction(_: unknown, fd: FormData): Promise<ActionResult> {
   return safe(async () => {
+    // "Save as draft": store it privately instead (admins only); publishing later runs this same action.
+    if (isDraftIntent(fd) && !fd.get("id")) return saveFormDraft("task", fd, str(fd, "title")) as Promise<never>;
     const me = await actionAdmin();
     const { input, assignees } = readTaskForm(fd);
     if (!assignees.length) throw new UserError("Assign the task to at least one person.");

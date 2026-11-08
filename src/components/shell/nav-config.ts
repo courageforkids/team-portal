@@ -1,9 +1,9 @@
 import {
   Home, CheckSquare, CalendarDays, Megaphone, FolderKanban, Users, BookOpen, LayoutDashboard, ListChecks, Inbox,
-  BarChart3, ShieldCheck, Settings, Building2, MessagesSquare, HeartHandshake, NotebookPen, Vote, PartyPopper, FileBarChart, HandCoins, type LucideIcon,
+  BarChart3, ShieldCheck, Settings, Building2, MessagesSquare, HeartHandshake, NotebookPen, Vote, PartyPopper, FileBarChart, HandCoins, FileClock, type LucideIcon,
 } from "lucide-react";
 
-export type NavItem = { href: string; label: string; icon: LucideIcon; badgeKey?: "reviews" | "notifications" | "messages" | "hours" };
+export type NavItem = { href: string; label: string; icon: LucideIcon; badgeKey?: "reviews" | "notifications" | "messages" | "hours" | "drafts" };
 export type NavGroups = { main: NavItem[]; admin: NavItem[] };
 
 export function navFor(role: "admin" | "leader" | "volunteer", canReview: boolean, canDonations = false): NavGroups {
@@ -26,6 +26,7 @@ export function navFor(role: "admin" | "leader" | "volunteer", canReview: boolea
     admin.push(
       { href: "/admin", label: "Command center", icon: LayoutDashboard },
       { href: "/tasks/all", label: "All tasks", icon: ListChecks },
+      { href: "/drafts", label: "Drafts", icon: FileClock, badgeKey: "drafts" },
       { href: "/review", label: "Review center", icon: Inbox, badgeKey: "reviews" },
       { href: "/admin/performance", label: "Performance", icon: BarChart3 },
       { href: "/donations", label: "Donations", icon: HandCoins },

@@ -156,6 +156,7 @@ export function AnnouncementForm({ initial, departments, accept, tzLabel, minLoc
 
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end lg:flex-col-reverse">
           <ButtonLink href={cancelHref} variant="secondary" className="w-full sm:w-auto lg:w-full">Cancel</ButtonLink>
+          {!initial && <SubmitButton name="intent" value="draft" variant="secondary" pendingText="Saving…" className="w-full sm:w-auto lg:w-full">Save as draft</SubmitButton>}
           <SubmitButton pendingText="Saving…" className="w-full sm:w-auto lg:w-full">
             {initial ? "Save changes" : publishMode === "schedule"
               ? <><CalendarClock className="h-4 w-4" aria-hidden />Schedule announcement</>

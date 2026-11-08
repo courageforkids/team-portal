@@ -174,6 +174,7 @@ export function TaskForm({ mode, values, people, departments, categories, projec
         )}
 
         <div className="flex flex-col gap-2">
+          {mode === "create" && <SubmitButton name="intent" value="draft" variant="secondary" pendingText="Saving…" size="lg">Save as draft</SubmitButton>}
           <SubmitButton size="lg" pendingText={mode === "create" ? "Creating…" : "Saving…"}>{mode === "create" ? "Create & assign" : "Save changes"}</SubmitButton>
           <a href={values.id ? `/tasks/${values.id}` : "/tasks/all"} className={buttonClass("ghost")}>Cancel</a>
         </div>

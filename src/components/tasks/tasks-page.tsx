@@ -59,7 +59,7 @@ export async function TasksPage({ me, sp, scope }: { me: CurrentUser; sp: SP; sc
         eyebrow={scope === "all" ? "Executive" : undefined}
         title={scope === "all" ? "All tasks" : "My tasks"}
         description={scope === "all" ? "Every assignment across the organization." : "Everything assigned to you, in one place."}
-        actions={me.role === "admin" && <div className="flex flex-wrap gap-2">{scope === "all" && <ButtonLink href="/tasks/drafts" variant="secondary">Drafts{draftCount ? ` (${draftCount})` : ""}</ButtonLink>}<ButtonLink href="/tasks/new"><Plus className="h-4 w-4" />New task</ButtonLink></div>}
+        actions={me.role === "admin" && <div className="flex flex-wrap gap-2">{scope === "all" && <ButtonLink href="/drafts" variant="secondary">Drafts{draftCount ? ` (${draftCount})` : ""}</ButtonLink>}<ButtonLink href="/tasks/new"><Plus className="h-4 w-4" />New task</ButtonLink></div>}
       />
       <Filters showMember={scope === "all"} people={people.map((p) => ({ id: p.id, name: p.name }))} departments={departments} projects={projects} />
       {layout === "list" && (

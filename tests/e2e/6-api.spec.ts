@@ -84,3 +84,38 @@ test("task drafts stay private until an admin publishes them", async ({ browser,
   expect((await sql`select count(*)::int as n from notifications where user_id = ${owen.id}`)[0].n).toBeGreaterThan(before);
   expect((await sql`select count(*)::int as n from task_drafts where batch = 'E2E week'`)[0].n).toBe(0);
 });
+
+test("drafts everywhere: announcement drafts from the API and the portal stay private until published", async ({ browser, request }) => {
+  const admin = await as(browser, "jacob");
+  await admin.page.goto("/settings/api-keys");
+  await admin.page.fill("#ak-name", "E2E drafts 2");
+  await admin.page.getByRole("button", { name: "Create key" }).click();
+  const key = await admin.page.getByTestId("copy-value").inputValue();
+  const t1 = `API draft ann ${Date.now()}`;
+  const r = await request.post("/api/v1/announcements", { headers: { Authorization: `Bearer ${key}` }, data: { title: t1, body: "Hello team", draft: true } });
+  expect(r.status(), await r.text()).toBe(200);
+  expect((await sql`select count(*)::int as n from announcements where title = ${t1}`)[0].n).toBe(0);
+
+  // Portal form "Save as draft"
+  const t2 = `Form draft ann ${Date.now()}`;
+  await admin.page.goto("/announcements/new");
+  await admin.page.fill("#title", t2);
+  await admin.page.fill("#body", "Drafted in the portal");
+  await admin.page.getByRole("button", { name: "Save as draft" }).click();
+  await admin.page.waitForURL(/\/drafts$/);
+  expect((await sql`select count(*)::int as n from announcements where title = ${t2}`)[0].n).toBe(0);
+  await expect(admin.page.getByText(t1)).toBeVisible();
+  await expect(admin.page.getByText(t2)).toBeVisible();
+
+  // Julia can't see the drafts page
+  const julia = await as(browser, "julia");
+  await julia.page.goto("/drafts");
+  await expect(julia.page).not.toHaveURL(/\/drafts$/);
+
+  for (const t of [t1, t2]) {
+    admin.page.once("dialog", (d) => d.accept());
+    await admin.page.getByRole("listitem").filter({ hasText: t }).getByRole("button", { name: "Publish" }).click();
+    await toast(admin.page, /Published 1 draft/);
+    await expect.poll(async () => (await sql`select count(*)::int as n from announcements where title = ${t}`)[0].n).toBe(1);
+  }
+});

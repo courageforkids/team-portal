@@ -221,12 +221,17 @@ export const tasks = pgTable("tasks", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("tasks_due_idx").on(t.dueAt), index("tasks_status_idx").on(t.status), index("tasks_project_idx").on(t.projectId)]);
 
-/** Tasks saved privately by an admin. Nobody is assigned or notified until a draft is published. */
+/** Anything an admin saves privately (tasks, announcements, polls, events…). Nobody sees it or is notified until it is published. */
 export const taskDrafts = pgTable("task_drafts", {
   id: uuid("id").primaryKey().defaultRandom(),
+  /** What it becomes when published: task, announcement, poll, event, meeting, resource. */
+  kind: text("kind").notNull().default("task"),
+  /** How it's stored: "task-input" (parsed task), "api" (an API request body) or "form" (a portal form's fields). */
+  format: text("format").notNull().default("task-input"),
+  title: text("title").notNull().default(""),
   /** Groups drafts so a whole week can be published at once, e.g. "Week of Nov 9". */
   batch: text("batch").notNull().default(""),
-  /** TaskInput with dueAt stored as an ISO string. */
+  /** task-input: TaskInput (dueAt as ISO). api: request body. form: { entries: [name, value][] }. */
   input: jsonb("input").$type<Record<string, unknown>>().notNull(),
   assigneeIds: jsonb("assignee_ids").$type<string[]>().notNull().default([]),
   separate: boolean("separate").notNull().default(true),

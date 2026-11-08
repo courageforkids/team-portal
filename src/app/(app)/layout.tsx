@@ -30,7 +30,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     unreadMessageTotal(user.id),
   ]);
   const canReview = user.role !== "volunteer" && isReviewer.n > 0;
-  const badges = { notifications: unread.n, reviews: pendingReviews.n, messages: unreadMessages, hours: pendingHours };
+  const drafts = user.role === "admin" ? Number(((await db.execute(sql`select count(*)::int as n from task_drafts`)) as unknown as { n: number }[])[0]?.n ?? 0) : 0;
+  const badges = { notifications: unread.n, reviews: pendingReviews.n, messages: unreadMessages, hours: pendingHours, drafts };
 
   return (
     <div className="min-h-dvh">

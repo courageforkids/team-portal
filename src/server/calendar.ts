@@ -4,6 +4,7 @@
  * endpoint: each one authenticates itself. Read-side helpers live in src/app/api/calendar/_lib.
  */
 import { eq } from "drizzle-orm";
+import { isDraftIntent, saveFormDraft } from "@/server/drafts";
 import { z } from "zod";
 import { db } from "@/db";
 import { events, projects, users } from "@/db/schema";
@@ -41,6 +42,8 @@ const eventSchema = z.object({
 
 export async function saveEventAction(_prev: ActionResult<unknown> | null, fd: FormData): Promise<ActionResult> {
   return safe(async () => {
+    // "Save as draft": store it privately instead (admins only); publishing later runs this same action.
+    if (isDraftIntent(fd) && !fd.get("id")) return saveFormDraft("event", fd, String(fd.get("title") ?? "")) as Promise<never>;
     const me = await actionAdmin();
     const id = str(fd, "id");
     const input = eventSchema.parse({

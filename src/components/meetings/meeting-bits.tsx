@@ -106,7 +106,7 @@ export function NewMeetingButton({ defaultStart, isAdmin }: { defaultStart: stri
             <Select id="mt-vis" name="visibility" defaultValue="everyone"><option value="everyone">Everyone</option><option value="leadership">Leadership & admins</option>{isAdmin && <option value="admin">Administrators only</option>}</Select>
           </Field>
           <Field label="Agenda" htmlFor="mt-agenda" hint="Optional. You can write it later."><Textarea id="mt-agenda" name="agenda" rows={4} placeholder={"1. Wins from this week\n2. Dickens of a Christmas plan\n3. Next box drive"} /></Field>
-          <div className="flex justify-end"><SubmitButton>Create</SubmitButton></div>
+          <div className="flex justify-end gap-2">{isAdmin && <SubmitButton name="intent" value="draft" variant="secondary" pendingText="Saving…">Save as draft</SubmitButton>}<SubmitButton>Create</SubmitButton></div>
         </ActionForm>
       </Dialog>
     </>
