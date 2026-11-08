@@ -121,22 +121,14 @@ export function ConversationView({ me, header, initial, info, highlight }: {
     else toast.push("error", r.error);
   };
 
-  // Stickers send right away, like iMessage; ordinary pasted photos are added as attachments.
-  const sendSticker = async (sticker: File) => {
-    const fd = new FormData();
-    fd.append("conversationId", header.id);
-    fd.append("body", "");
-    fd.append("files", sticker);
-    const r = await sendMessageAction(null, fd);
-    if (r.ok) { atBottom.current = true; await poll(); } else toast.push("error", r.error);
-  };
+  // Stickers and pasted photos go into the message box; they send when you press Send.
   const onImages = useCallback(async (list: File[]) => {
     for (const f of list.slice(0, 4)) {
       const sticker = await asSticker(f);
-      if (sticker) await sendSticker(sticker);
-      else { const small = await compressImage(f); setFiles((cur) => [...cur, small].slice(0, 4)); }
+      const ready = sticker ?? await compressImage(f);
+      setFiles((cur) => [...cur, ready].slice(0, 4));
     }
-  }, [header.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   const pickFiles = async (list: FileList | null) => {
     const arr = Array.from(list ?? []).slice(0, 4);
@@ -193,26 +185,30 @@ export function ConversationView({ me, header, initial, info, highlight }: {
             {g.rows.map(({ m, first }) => {
               if (m.system) return <p key={m.id} id={`m-${m.id}`} className="my-2 text-center text-xs text-muted">{m.body} · {timeOf(m.createdAt)}</p>;
               const mine = m.authorId === me.id;
-              const stickerOnly = !m.deleted && !m.body && m.files.length > 0 && m.files.every((f) => isStickerName(f.filename));
+              const stickers = m.deleted ? [] : m.files.filter((f) => isStickerName(f.filename));
+              const others = m.files.filter((f) => !isStickerName(f.filename));
+              const showBubble = m.deleted || !!m.body || others.length > 0;
               return (
                 <div key={m.id} id={`m-${m.id}`} className={cn("group flex gap-2", mine ? "justify-end" : "justify-start", first ? "mt-3" : "mt-0.5")}>
                   {!mine && isGroupish && <div className="w-7 shrink-0">{first && <Avatar name={m.authorName} fileId={m.authorAvatar} size={28} />}</div>}
                   <div className={cn("flex max-w-[78%] flex-col", mine ? "items-end" : "items-start")}>
                     {first && !mine && isGroupish && <span className="mb-0.5 ml-1 text-[11px] font-semibold text-muted">{m.authorName}</span>}
                     <div className={cn("flex items-end gap-1", mine && "flex-row-reverse")}>
-                      {stickerOnly ? (
-                        <div className={cn("flex flex-wrap gap-1", highlight === m.id && "rounded-xl ring-2 ring-accent")}>
+                      <div className={cn("flex flex-col gap-1", mine ? "items-end" : "items-start")}>
+                      {stickers.length > 0 && (
+                        <div className={cn("flex flex-wrap gap-1", highlight === m.id && !showBubble && "rounded-xl ring-2 ring-accent")}>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          {m.files.map((f) => <img key={f.id} src={`/api/files/${f.id}?inline=1`} alt="Sticker" loading="lazy" className="h-28 w-auto max-w-[160px] object-contain" />)}
+                          {stickers.map((f) => <img key={f.id} src={`/api/files/${f.id}?inline=1`} alt="Sticker" loading="lazy" className="h-28 w-auto max-w-[160px] object-contain" />)}
                         </div>
-                      ) : (
+                      )}
+                      {showBubble && (
                       <div className={cn("rounded-2xl px-3.5 py-2 text-[15px] leading-snug shadow-soft",
                         m.deleted ? "border border-dashed border-line bg-transparent italic text-faint" : mine ? "bg-brand text-brand-fg" : "bg-surface-2 text-fg",
                         highlight === m.id && "ring-2 ring-accent")}>
                         {m.deleted ? "Message removed" : (<>
-                          {m.files.length > 0 && (
-                            <div className={cn("mb-1 grid gap-1", m.files.length > 1 ? "grid-cols-2" : "grid-cols-1")}>
-                              {m.files.map((f) => f.mimeType.startsWith("image/") && !f.mimeType.includes("hei") ? (
+                          {others.length > 0 && (
+                            <div className={cn("mb-1 grid gap-1", others.length > 1 ? "grid-cols-2" : "grid-cols-1")}>
+                              {others.map((f) => f.mimeType.startsWith("image/") && !f.mimeType.includes("hei") ? (
                                 <a key={f.id} href={`/api/files/${f.id}?inline=1`} target="_blank" rel="noopener" className="block overflow-hidden rounded-xl">
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
                                   <img src={`/api/files/${f.id}?inline=1`} alt={f.filename} loading="lazy" className="max-h-64 w-full object-cover" />
@@ -224,6 +220,7 @@ export function ConversationView({ me, header, initial, info, highlight }: {
                         </>)}
                       </div>
                       )}
+                      </div>
                       {!m.deleted && (
                         <button onClick={() => setMenuFor(m)} aria-label="Message options"
                           className="rounded-full p-1 text-faint opacity-60 transition hover:bg-surface-2 hover:text-fg md:opacity-0 md:group-hover:opacity-100 focus:opacity-100">
@@ -256,8 +253,8 @@ export function ConversationView({ me, header, initial, info, highlight }: {
               {files.map((f, i) => (
                 <div key={i} className="relative shrink-0">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={URL.createObjectURL(f)} alt="" className="h-16 w-16 rounded-lg object-cover" />
-                  <button onClick={() => setFiles(files.filter((_, j) => j !== i))} aria-label="Remove photo" className="absolute -right-1.5 -top-1.5 rounded-full bg-fg p-0.5 text-bg"><X className="h-3 w-3" /></button>
+                  <img src={URL.createObjectURL(f)} alt={isStickerName(f.name) ? "Sticker preview" : ""} className={isStickerName(f.name) ? "h-16 w-auto max-w-24 object-contain" : "h-16 w-16 rounded-lg object-cover"} />
+                  <button onClick={() => setFiles(files.filter((_, j) => j !== i))} aria-label={isStickerName(f.name) ? "Remove sticker" : "Remove photo"} className="absolute -right-1.5 -top-1.5 rounded-full bg-fg p-0.5 text-bg"><X className="h-3 w-3" /></button>
                 </div>
               ))}
             </div>

@@ -107,7 +107,7 @@ test("members can delete their own messages and report others'", async ({ browse
   await david.ctx.close();
 });
 
-test("stickers send as bubble-free images, and others see who's typing", async ({ browser }) => {
+test("stickers go in the message box, send bubble-free, and others see who's typing", async ({ browser }) => {
   const julia = await as(browser, "julia");
   const isaac = await as(browser, "isaac");
   for (const p of [julia.page, isaac.page]) { await p.goto("/messages"); await p.getByRole("link", { name: /Everyone/ }).first().click(); await p.waitForURL(/\/messages\/[0-9a-f-]{36}/); }
@@ -124,9 +124,10 @@ test("stickers send as bubble-free images, and others see who's typing", async (
     const dt = new DataTransfer(); dt.items.add(new File([blob], "s.png", { type: "image/png" }));
     el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
   });
-  await expect(julia.page.getByRole("img", { name: "Sticker" }).last()).toBeVisible({ timeout: 15_000 });
+  // It waits in the message box until Send is pressed, then goes out with the typed text
+  await expect(julia.page.getByRole("img", { name: "Sticker preview" })).toBeVisible({ timeout: 15_000 });
+  await julia.page.getByRole("button", { name: "Send" }).click();
+  await expect(julia.page.getByRole("img", { name: "Sticker preview" })).toHaveCount(0);
   await expect(isaac.page.getByRole("img", { name: "Sticker" }).last()).toBeVisible({ timeout: 15_000 });
-  // The typed text is still there, and sends normally
-  await julia.page.locator("#composer").press("Enter");
   await expect(isaac.page.getByText("hello there").last()).toBeVisible({ timeout: 15_000 });
 });
