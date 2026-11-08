@@ -221,6 +221,19 @@ export const tasks = pgTable("tasks", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("tasks_due_idx").on(t.dueAt), index("tasks_status_idx").on(t.status), index("tasks_project_idx").on(t.projectId)]);
 
+/** Tasks saved privately by an admin. Nobody is assigned or notified until a draft is published. */
+export const taskDrafts = pgTable("task_drafts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** Groups drafts so a whole week can be published at once, e.g. "Week of Nov 9". */
+  batch: text("batch").notNull().default(""),
+  /** TaskInput with dueAt stored as an ISO string. */
+  input: jsonb("input").$type<Record<string, unknown>>().notNull(),
+  assigneeIds: jsonb("assignee_ids").$type<string[]>().notNull().default([]),
+  separate: boolean("separate").notNull().default(true),
+  createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const taskAssignees = pgTable("task_assignees", {
   taskId: uuid("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),

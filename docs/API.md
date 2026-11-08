@@ -16,6 +16,9 @@ For trusted automation (e.g. Claude) acting on behalf of an Executive Administra
 | GET | `/api/v1/lookups` | people, departments, projects, categories, work groups |
 | GET | `/api/v1/tasks` | `?view=active\|overdue\|review\|completed\|everything&member=Julia&q=text` |
 | POST | `/api/v1/tasks` | `{ title, assignees: ["Julia"], dueAt, instructions?, priority?: low\|medium\|high\|urgent, department?, project?, category?, submissionTypes?: ["file","text","link","checklist"], checklist?: ["step"], links?: [{label,url}], deliverables?, completionCriteria?, requiresReview?: true, reviewer?, separate?: true, workGroup? }` |
+| POST | `/api/v1/tasks` with `draft: true, batch?: "Week of Nov 9"` | Saves a private draft instead: nobody is assigned or notified. Review at /tasks/drafts. |
+| GET | `/api/v1/task-drafts` | Lists drafts. |
+| POST | `/api/v1/task-drafts/publish` | `{ ids: [...] }` or `{ batch: "Week of Nov 9" }`. Creates the tasks and notifies assignees. |
 | GET | `/api/v1/tasks/:id` | task + assignees + submissions + reviews |
 | PATCH | `/api/v1/tasks/:id` | any of `title, instructions, dueAt, priority, department, project, category, deliverables, completionCriteria, assignees, requiresReview, reviewer`, and/or `{ status, reason }` (status: not_started, in_progress, approved, canceled, excused, blocked…) |
 | POST | `/api/v1/tasks/:id/review` | `{ decision: "approved" \| "revision_requested", feedback }` |

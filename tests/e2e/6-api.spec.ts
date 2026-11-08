@@ -57,3 +57,30 @@ test("an admin-created API key can create tasks, events, shifts, announcements a
   await sql`delete from events where id = ${ev.id}`;
   await admin.ctx.close(); await julia.ctx.close();
 });
+
+test("task drafts stay private until an admin publishes them", async ({ browser, request }) => {
+  const admin = await as(browser, "jacob");
+  await admin.page.goto("/settings/api-keys");
+  await admin.page.fill("#ak-name", "E2E drafts");
+  await admin.page.getByRole("button", { name: "Create key" }).click();
+  const key = await admin.page.getByTestId("copy-value").inputValue();
+  const H = { Authorization: `Bearer ${key}` };
+  const title = `Draft task ${Date.now()}`;
+  const [owen] = await sql`select id from users where email = 'owen@demo.cfk.test'`;
+  const before = (await sql`select count(*)::int as n from notifications where user_id = ${owen.id}`)[0].n;
+  const r = await request.post("/api/v1/tasks", { headers: H, data: { title, assignees: ["Owen"], dueAt: "2026-12-20T17:00", draft: true, batch: "E2E week" } });
+  expect(r.status(), await r.text()).toBe(200);
+  expect((await r.json()).draft).toBe(true);
+  expect((await sql`select count(*)::int as n from tasks where title = ${title}`)[0].n).toBe(0);
+  expect((await sql`select count(*)::int as n from notifications where user_id = ${owen.id}`)[0].n).toBe(before);
+
+  await admin.page.goto("/tasks/drafts");
+  const card = admin.page.getByRole("listitem").filter({ hasText: title });
+  await expect(card).toBeVisible();
+  admin.page.once("dialog", (d) => d.accept());
+  await card.getByRole("button", { name: "Publish" }).click();
+  await toast(admin.page, /Published 1 draft/);
+  await expect.poll(async () => (await sql`select count(*)::int as n from tasks where title = ${title}`)[0].n).toBe(1);
+  expect((await sql`select count(*)::int as n from notifications where user_id = ${owen.id}`)[0].n).toBeGreaterThan(before);
+  expect((await sql`select count(*)::int as n from task_drafts where batch = 'E2E week'`)[0].n).toBe(0);
+});

@@ -13,6 +13,9 @@ import { TaskBoard } from "./task-board";
 import { TaskMonth } from "./task-month";
 import { PRIORITIES, TASK_STATUSES, type Priority, type TaskStatus } from "@/lib/task-meta";
 import { DEFAULT_TZ } from "@/lib/dates";
+import { sql } from "drizzle-orm";
+import { db } from "@/db";
+import { taskDrafts } from "@/db/schema";
 
 type SP = Record<string, string | undefined>;
 
@@ -35,11 +38,12 @@ export async function TasksPage({ me, sp, scope }: { me: CurrentUser; sp: SP; sc
   const listFilters: TaskFilters = layout === "list" ? { ...filters, view } : layout === "board" ? { ...filters, view: "everything" } : {
     ...filters, view: "everything", dueFrom: addDays(startOfMonth(new Date(`${month}-01T12:00:00`)), -7), dueTo: addDays(endOfMonth(new Date(`${month}-01T12:00:00`)), 7),
   };
-  const [tasks, counts, people, departments, projects] = await Promise.all([
+  const [tasks, counts, people, departments, projects, draftCount] = await Promise.all([
     loadTasks(me, listFilters),
     Promise.all((["active", "overdue", "review", "completed"] as const).map(async (v) => [v, (await loadTasks(me, { ...filters, view: v, limit: 1000 })).length] as const)),
     scope === "all" ? getPeople() : Promise.resolve([]),
     getDepartments(), getProjectsLite(),
+    scope === "all" && me.role === "admin" ? db.select({ n: sql<number>`count(*)::int` }).from(taskDrafts).then((r) => r[0]?.n ?? 0) : Promise.resolve(0),
   ]);
   const boardTasks = layout === "board" ? tasks.filter((t) => !["canceled", "excused"].includes(t.status) && (t.status !== "approved" || (t.completedAt && t.completedAt > addDays(now, -14)))) : tasks;
   const c = Object.fromEntries(counts) as Record<string, number>;
@@ -55,7 +59,7 @@ export async function TasksPage({ me, sp, scope }: { me: CurrentUser; sp: SP; sc
         eyebrow={scope === "all" ? "Executive" : undefined}
         title={scope === "all" ? "All tasks" : "My tasks"}
         description={scope === "all" ? "Every assignment across the organization." : "Everything assigned to you, in one place."}
-        actions={me.role === "admin" && <ButtonLink href="/tasks/new"><Plus className="h-4 w-4" />New task</ButtonLink>}
+        actions={me.role === "admin" && <div className="flex flex-wrap gap-2">{scope === "all" && <ButtonLink href="/tasks/drafts" variant="secondary">Drafts{draftCount ? ` (${draftCount})` : ""}</ButtonLink>}<ButtonLink href="/tasks/new"><Plus className="h-4 w-4" />New task</ButtonLink></div>}
       />
       <Filters showMember={scope === "all"} people={people.map((p) => ({ id: p.id, name: p.name }))} departments={departments} projects={projects} />
       {layout === "list" && (

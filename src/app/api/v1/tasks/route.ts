@@ -2,6 +2,7 @@ import { z } from "zod";
 import { apiRoute, ApiError, jsonBody } from "@/server/api-auth";
 import { bool, parseWhen, resolveCategory, resolveDepartment, resolvePeople, resolveProject, text } from "@/server/api-helpers";
 import { createTasks, type TaskInput } from "@/server/tasks";
+import { saveDraft } from "@/server/task-drafts";
 import { loadTasks, type TaskFilters } from "@/server/queries";
 import { DEFAULT_TZ } from "@/lib/dates";
 import { db } from "@/db";
@@ -51,6 +52,11 @@ export const POST = apiRoute(async (req, actor) => {
     submissionTypes: types, checklist, links, requiresReview, reviewerId: requiresReview && b.reviewer ? (await resolvePeople([b.reviewer]))[0] : null,
     internalNotes: text(b.internalNotes, 4000), workGroupId: (b.workGroup as string) ?? null,
   };
+  // Drafts are saved privately: no one is assigned or notified until an admin publishes them.
+  if (bool(b.draft, false)) {
+    const draftId = await saveDraft(actor, input, assignees, separate, text(b.batch, 80));
+    return { ok: true, draft: true, draftId, url: "/tasks/drafts" };
+  }
   const ids = await createTasks(actor, input, assignees, { separate });
   if (input.workGroupId) await addSystemMessage(input.workGroupId, `New task for this group: “${title}”`);
   return { ok: true, taskIds: ids, urls: ids.map((id) => `/tasks/${id}`) };
