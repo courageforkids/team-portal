@@ -83,7 +83,7 @@ export function ConversationView({ me, header, initial, info, highlight }: {
     document.addEventListener("visibilitychange", onVis);
     return () => { clearInterval(t); document.removeEventListener("visibilitychange", onVis); };
   }, [poll]);
-  useEffect(() => { if (header.member) markReadAction(header.id); }, [header.id, header.member]);
+  useEffect(() => { if (header.member) void markReadAction(header.id).then(() => window.dispatchEvent(new Event("cfk-badges-refresh"))); }, [header.id, header.member]);
 
   // Stick to the bottom when new messages arrive (unless the person scrolled up to read).
   useLayoutEffect(() => {

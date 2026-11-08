@@ -1,4 +1,5 @@
 "use client";
+import { useBadges } from "./badges";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -46,6 +47,8 @@ export function Brand({ orgName }: { orgName: string }) {
 }
 
 export function NavList({ role, canReview, canDonations = false, badges, onNavigate }: { role: "admin" | "leader" | "volunteer"; canReview: boolean; canDonations?: boolean; badges: Record<string, number>; onNavigate?: () => void }) {
+  const live = useBadges();
+  if (Object.keys(live).length) badges = live;
   const groups: NavGroups = navFor(role, canReview, canDonations);
   return (
     <nav aria-label="Main" className="flex flex-col gap-6">

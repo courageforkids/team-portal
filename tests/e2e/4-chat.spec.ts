@@ -131,3 +131,29 @@ test("stickers go in the message box, send bubble-free, and others see who's typ
   await expect(isaac.page.getByRole("img", { name: "Sticker" }).last()).toBeVisible({ timeout: 15_000 });
   await expect(isaac.page.getByText("hello there").last()).toBeVisible({ timeout: 15_000 });
 });
+
+test("members can rename a direct chat, and the menu shows live counts", async ({ browser, request }) => {
+  const reese = await as(browser, "reese");
+  await reese.page.goto("/messages");
+  const [r] = await sql`select id from users where email = 'reese@demo.cfk.test'`;
+  const [o] = await sql`select id from users where email = 'owen@demo.cfk.test'`;
+  const key = [r.id, o.id].sort().join(":");
+  let [c] = await sql`select id from conversations where dm_key = ${key}`;
+  if (!c) {
+    [c] = await sql`insert into conversations (kind, dm_key, created_by_id) values ('dm', ${key}, ${r.id}) returning id`;
+    await sql`insert into conversation_members (conversation_id, user_id) values (${c.id}, ${r.id}), (${c.id}, ${o.id})`;
+  }
+  await reese.page.goto(`/messages/${c.id}`);
+  await reese.page.getByRole("button", { name: "Chat details" }).click();
+  await reese.page.getByRole("button", { name: "Rename chat" }).click();
+  await reese.page.getByLabel("Chat name").fill("Box planning");
+  await reese.page.getByRole("button", { name: "Save" }).click();
+  await expect.poll(async () => (await sql`select title from conversations where id = ${c.id}`)[0].title).toBe("Box planning");
+
+  // Live menu counts
+  const counts = await (await reese.page.request.get("/api/badges")).json();
+  const [{ n }] = await sql`select count(*)::int as n from tasks t join task_assignees ta on ta.task_id = t.id where ta.user_id = ${r.id} and t.status in ('not_started','in_progress','revision_requested','blocked')`;
+  expect(typeof counts.tasks).toBe("number");
+  expect(counts.tasks).toBeGreaterThanOrEqual(Math.min(n, 1) ? 1 : 0);
+  void request;
+});

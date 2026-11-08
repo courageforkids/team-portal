@@ -40,7 +40,19 @@ export async function sendPush(userId: string, payload: PushPayload) {
     if (!setup()) return 0;
     const subs = await db.select().from(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
     if (!subs.length) return 0;
-    const body = JSON.stringify({ title: payload.title, body: (payload.body ?? "").slice(0, 180), href: payload.href ?? "/", tag: payload.tag });
+    // The number on the home screen app icon: unread notifications + unread chats.
+    let badge: number | undefined;
+    try {
+      const { notifications } = await import("@/db/schema");
+      const { and, count, isNull } = await import("drizzle-orm");
+      const { unreadMessageTotal } = await import("./chat");
+      const [[u], m] = await Promise.all([
+        db.select({ n: count() }).from(notifications).where(and(eq(notifications.userId, userId), isNull(notifications.readAt))),
+        unreadMessageTotal(userId),
+      ]);
+      badge = u.n + m;
+    } catch { /* badge is optional */ }
+    const body = JSON.stringify({ title: payload.title, body: (payload.body ?? "").slice(0, 180), href: payload.href ?? "/", tag: payload.tag, badge });
     const dead: string[] = [];
     let sent = 0;
     await Promise.allSettled(subs.map(async (s) => {

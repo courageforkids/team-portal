@@ -12,7 +12,7 @@ import type { CurrentUser } from "./auth";
  * - Everyone active is a member of the single "team" conversation.
  */
 
-export type ConvAccess = { read: boolean; post: boolean; member: boolean; manage: boolean };
+export type ConvAccess = { read: boolean; post: boolean; member: boolean; manage: boolean; rename: boolean };
 
 export async function conversationAccess(u: CurrentUser, conversationId: string): Promise<(ConvAccess & { conv: typeof conversations.$inferSelect }) | null> {
   const conv = (await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1))[0];
@@ -24,7 +24,9 @@ export async function conversationAccess(u: CurrentUser, conversationId: string)
   const post = member && !conv.archived;
   // Who can rename / add / remove: admins for work groups; the creator or an admin for group chats.
   const manage = conv.kind === "workgroup" ? isAdmin : conv.kind === "group" ? isAdmin || conv.createdById === u.id : false;
-  return { conv, read, post, member, manage };
+  // Group chats and direct chats: any member can rename. Team chat and work groups: admins.
+  const rename = conv.kind === "group" || conv.kind === "dm" ? member || isAdmin : isAdmin;
+  return { conv, read, post, member, manage, rename };
 }
 
 /** Makes sure the all-team conversation exists and every active person is in it. */
@@ -80,7 +82,7 @@ export async function listConversations(u: CurrentUser, opts: { includeOversight
   return rows.map(({ c, m }) => {
     const people = memberRows.filter((p) => p.conversationId === c.id && p.status === "active").map((p) => ({ id: p.id, name: p.name, avatarFileId: p.avatarFileId }));
     const others = people.filter((p) => p.id !== u.id);
-    const title = c.kind === "dm" ? (others[0]?.name ?? "Former member") : c.title || others.map((p) => p.name.split(" ")[0]).join(", ") || "Chat";
+    const title = c.kind === "dm" ? (c.title || (others[0]?.name ?? "Former member")) : c.title || others.map((p) => p.name.split(" ")[0]).join(", ") || "Chat";
     const subtitle = c.kind === "team" ? `${people.length} people` : c.kind === "workgroup" ? `Work group · ${people.map((p) => p.name.split(" ")[0]).join(" + ")}` : c.kind === "group" ? `${people.length} people` : "Direct message";
     const l = last.get(c.id);
     const lastPreview = !l ? "No messages yet" : l.deleted_at ? "Message removed" : l.system ? l.body : `${l.author_name?.split(" ")[0] ?? "Someone"}: ${l.body || "📷 Photo"}`;

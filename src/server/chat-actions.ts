@@ -149,9 +149,9 @@ export async function renameConversationAction(conversationId: string, title: st
   return safe(async () => {
     const me = await actionUser();
     const access = await conversationAccess(me, uuid.parse(conversationId));
-    if (!access?.manage) throw new AuthError("Only the chat's creator or an administrator can rename it.");
+    if (!access?.rename) throw new AuthError(access?.conv.kind === "team" || access?.conv.kind === "workgroup" ? "Only an administrator can rename this chat." : "Only people in this chat can rename it.");
     const t = title.trim().slice(0, 80);
-    if (access.conv.kind === "workgroup" && !t) throw new UserError("Work groups need a name.");
+    if ((access.conv.kind === "workgroup" || access.conv.kind === "team") && !t) throw new UserError("This chat needs a name.");
     await db.update(conversations).set({ title: t || null }).where(eq(conversations.id, conversationId));
     await addSystemMessage(conversationId, `${me.name} renamed the chat to “${t || "untitled"}”`);
     return { ok: true, message: "Renamed." };

@@ -172,3 +172,8 @@ html { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
   html.kb-open [data-kb-fit] { position: fixed; top: var(--vvtop, 0px); bottom: auto; height: var(--vvh, 100dvh); left: 0; right: 0; z-index: 60; }
   html.kb-open nav[aria-label="Primary"] { display: none; }
 }
+
+/* Feel like an app: long-pressing links, buttons and images doesn't open the browser's preview/"Open in Safari" menu,
+   and menus/buttons aren't text-selectable. Message text and form fields stay selectable. */
+a, img, button, [role="button"], nav, header { -webkit-touch-callout: none; }
+nav, header, button, [role="button"], a { -webkit-user-select: none; user-select: none; }

@@ -1,4 +1,5 @@
 "use client";
+import { useBadges } from "./badges";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -13,9 +14,11 @@ export function MobileNav({ role, canReview, canDonations = false, badges, orgNa
   useEffect(() => setOpen(false), [pathname]);
   useEffect(() => { try { sessionStorage.removeItem("cfk-reloaded"); } catch {} }, []);
   useEffect(() => { document.body.style.overflow = open ? "hidden" : ""; }, [open]);
+  const live = useBadges();
+  if (Object.keys(live).length) badges = live;
   const tabs = [
     { href: "/", label: "Home", icon: Home },
-    { href: "/tasks", label: "Tasks", icon: CheckSquare },
+    { href: "/tasks", label: "Tasks", icon: CheckSquare, count: badges.tasks },
     { href: "/messages", label: "Chat", icon: MessagesSquare, count: badges.messages },
     { href: "/notifications", label: "Inbox", icon: Bell, count: badges.notifications },
   ];

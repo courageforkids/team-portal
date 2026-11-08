@@ -17,10 +17,10 @@ export type ChatInfoProps = {
   conversation: { id: string; kind: "team" | "dm" | "group" | "workgroup"; title: string | null; description: string; archived: boolean };
   me: { id: string; role: string };
   members: Person[]; everyone: Person[];
-  member: boolean; manage: boolean; muted: boolean;
+  member: boolean; manage: boolean; rename: boolean; muted: boolean;
 };
 
-export function ChatInfo({ open, onClose, conversation: c, me, members, everyone, member, manage, muted }: ChatInfoProps) {
+export function ChatInfo({ open, onClose, conversation: c, me, members, everyone, member, manage, rename, muted }: ChatInfoProps) {
   const [busy, start] = useTransition();
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(c.title ?? "");
@@ -39,17 +39,17 @@ export function ChatInfo({ open, onClose, conversation: c, me, members, everyone
 
   return (
     <>
-      <Dialog open={open} onClose={onClose} title={c.kind === "dm" ? "Direct message" : c.title || "Chat details"} description={c.kind === "workgroup" ? c.description || "Work group" : c.kind === "team" ? "Everyone on the team is in this chat." : undefined}>
+      <Dialog open={open} onClose={onClose} title={c.title || (c.kind === "dm" ? "Direct message" : "Chat details")} description={c.kind === "workgroup" ? c.description || "Work group" : c.kind === "team" ? "Everyone on the team is in this chat." : undefined}>
         <div className="space-y-5">
           <p className="flex items-start gap-2 rounded-lg bg-surface-2 px-3 py-2 text-xs text-muted">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
             Chats are for Courage for Kids work. Administrators can review messages to keep everyone safe. Never share patient names, photos or medical details here.
           </p>
 
-          {c.kind === "group" && manage && (
+          {rename && (
             renaming ? (
               <div className="flex gap-2">
-                <input className="input h-10" value={name} onChange={(e) => setName(e.target.value)} placeholder="Chat name" aria-label="Chat name" maxLength={80} />
+                <input className="input h-10" value={name} onChange={(e) => setName(e.target.value)} placeholder={c.kind === "dm" ? "Name this chat (leave empty to use their name)" : "Chat name"} aria-label="Chat name" maxLength={80} />
                 <Button disabled={busy} onClick={() => run(() => renameConversationAction(c.id, name), () => setRenaming(false))}>Save</Button>
               </div>
             ) : <Button variant="secondary" size="sm" onClick={() => setRenaming(true)}><Pencil className="h-4 w-4" />Rename chat</Button>

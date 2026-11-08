@@ -7,7 +7,12 @@ type Theme = "light" | "dark" | "system";
 function apply(t: Theme) {
   const d = t === "dark" || (t === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.classList.toggle("dark", d);
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", d ? "#0d1117" : "#f7f7f5");
+  // Saved as a cookie too, so the server sends the right top-bar color next time the app opens.
+  document.cookie = `cfk-theme=${t};path=/;max-age=31536000;samesite=lax`;
+  document.querySelectorAll('meta[name="theme-color"]').forEach((e) => {
+    if (t === "system") return;
+    e.removeAttribute("media"); e.setAttribute("content", d ? "#0d1117" : "#f7f7f5");
+  });
 }
 export function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>("light");

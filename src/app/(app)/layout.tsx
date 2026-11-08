@@ -1,7 +1,7 @@
 import { canManageDonations } from "@/server/donations";
-import { and, count, eq, inArray, isNull, sql } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { notifications, tasks } from "@/db/schema";
+import { tasks } from "@/db/schema";
 import { requireUser } from "@/server/auth";
 import { getSettings } from "@/server/settings";
 import { runMaintenanceIfDue } from "@/server/maintenance";
@@ -9,31 +9,24 @@ import { Brand, NavList } from "@/components/shell/sidebar";
 import { MobileNav } from "@/components/shell/mobile-nav";
 import { UserMenu } from "@/components/shell/user-menu";
 import { NotificationBell } from "@/components/shell/notification-bell";
-import { unreadMessageTotal } from "@/server/chat";
+import { computeBadges } from "@/server/badges";
+import { BadgesProvider } from "@/components/shell/badges";
 
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
   // Usually a no-op: the 5-minute heartbeat runs reminders and cleanup, so page loads rarely wait on it.
   await runMaintenanceIfDue();
-  const reviewWhere = user.role === "admin"
-    ? inArray(tasks.status, ["submitted", "under_review"])
-    : and(inArray(tasks.status, ["submitted", "under_review"]), eq(tasks.reviewerId, user.id));
-  // Independent lookups run at the same time instead of one after another.
-  const [s, [unread], [pendingReviews], [isReviewer], canDonations, pendingHours, unreadMessages] = await Promise.all([
+  const [s, [isReviewer], canDonations, badges] = await Promise.all([
     getSettings(),
-    db.select({ n: count() }).from(notifications).where(and(eq(notifications.userId, user.id), isNull(notifications.readAt))),
-    db.select({ n: count() }).from(tasks).where(reviewWhere),
     user.role === "admin" ? Promise.resolve([{ n: 1 }]) : db.select({ n: count() }).from(tasks).where(eq(tasks.reviewerId, user.id)),
     canManageDonations(user),
-    user.role === "admin" ? db.execute(sql`select count(*)::int as n from volunteer_hours where status = 'pending'`).then((r) => Number((r as unknown as { n: number }[])[0]?.n ?? 0)) : Promise.resolve(0),
-    unreadMessageTotal(user.id),
+    computeBadges(user),
   ]);
   const canReview = user.role !== "volunteer" && isReviewer.n > 0;
-  const drafts = user.role === "admin" ? Number(((await db.execute(sql`select count(*)::int as n from task_drafts`)) as unknown as { n: number }[])[0]?.n ?? 0) : 0;
-  const badges = { notifications: unread.n, reviews: pendingReviews.n, messages: unreadMessages, hours: pendingHours, drafts };
 
   return (
+    <BadgesProvider initial={badges}>
     <div className="min-h-dvh">
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[70] focus:rounded-lg focus:bg-surface focus:px-3 focus:py-2 focus:shadow-pop">Skip to content</a>
       {/* Desktop sidebar */}
@@ -49,7 +42,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <div className="md:hidden"><Brand orgName={s.orgName} /></div>
           <div className="hidden text-sm text-muted md:block"><span className="italic">{s.tagline}</span></div>
           <div className="flex items-center gap-1.5">
-            <NotificationBell count={unread.n} />
+            <NotificationBell count={badges.notifications} />
             <div className="md:hidden"><UserMenu name={user.name} title={user.title} avatarFileId={user.avatarFileId} compact /></div>
           </div>
         </header>
@@ -57,5 +50,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </div>
       <MobileNav role={user.role} canReview={canReview} canDonations={canDonations} badges={badges} orgName={s.orgName} />
     </div>
+    </BadgesProvider>
   );
 }

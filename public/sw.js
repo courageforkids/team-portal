@@ -6,6 +6,10 @@ self.addEventListener("push", (event) => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch { data = { title: "Courage for Kids", body: event.data && event.data.text() }; }
   const title = data.title || "Courage for Kids";
+  // Red number on the home screen icon, like Messages.
+  if (typeof data.badge === "number" && self.navigator && self.navigator.setAppBadge) {
+    try { data.badge > 0 ? self.navigator.setAppBadge(data.badge) : self.navigator.clearAppBadge(); } catch (e) {}
+  }
   event.waitUntil(self.registration.showNotification(title, {
     body: data.body || "",
     icon: "/icon.png",

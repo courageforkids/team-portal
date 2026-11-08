@@ -3,13 +3,13 @@ import {
   BarChart3, ShieldCheck, Settings, Building2, MessagesSquare, HeartHandshake, NotebookPen, Vote, PartyPopper, FileBarChart, HandCoins, FileClock, type LucideIcon,
 } from "lucide-react";
 
-export type NavItem = { href: string; label: string; icon: LucideIcon; badgeKey?: "reviews" | "notifications" | "messages" | "hours" | "drafts" };
+export type NavItem = { href: string; label: string; icon: LucideIcon; badgeKey?: "reviews" | "notifications" | "messages" | "hours" | "drafts" | "tasks" };
 export type NavGroups = { main: NavItem[]; admin: NavItem[] };
 
 export function navFor(role: "admin" | "leader" | "volunteer", canReview: boolean, canDonations = false): NavGroups {
   const main: NavItem[] = [
     { href: "/", label: "Home", icon: Home },
-    { href: "/tasks", label: "My tasks", icon: CheckSquare },
+    { href: "/tasks", label: "My tasks", icon: CheckSquare, badgeKey: "tasks" },
     { href: "/messages", label: "Chat", icon: MessagesSquare, badgeKey: "messages" },
     { href: "/calendar", label: "Calendar", icon: CalendarDays },
     { href: "/volunteer", label: "Volunteer", icon: HeartHandshake, badgeKey: role === "admin" ? "hours" : undefined },

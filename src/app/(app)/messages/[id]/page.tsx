@@ -31,8 +31,8 @@ export default async function ConversationPage({ params, searchParams }: { param
     ? await db.select({ id: tasks.id, title: tasks.title, status: tasks.status }).from(tasks)
       .where(and(eq(tasks.workGroupId, id), inArray(tasks.status, ACTIVE), taskVisibilityWhere(me))).limit(8)
     : [];
-  const title = c.kind === "dm" ? (others[0]?.name ?? "Former member") : c.title || others.map((p) => p.name.split(" ")[0]).join(", ") || "Chat";
-  const subtitle = c.kind === "team" ? `Everyone · ${active.length} people` : c.kind === "dm" ? (others[0]?.title || "Direct message")
+  const title = c.kind === "dm" ? (c.title || (others[0]?.name ?? "Former member")) : c.title || others.map((p) => p.name.split(" ")[0]).join(", ") || "Chat";
+  const subtitle = c.kind === "team" ? `Everyone · ${active.length} people` : c.kind === "dm" ? (c.title ? others[0]?.name ?? "Direct message" : others[0]?.title || "Direct message")
     : c.kind === "workgroup" ? `Work group · ${active.map((p) => p.name.split(" ")[0]).join(" + ")}` : active.map((p) => p.name.split(" ")[0]).join(", ");
   const people = (c.kind === "dm" ? others : active).map((p) => ({ id: p.id, name: p.name, avatarFileId: p.avatarFileId }));
   return (
@@ -45,7 +45,7 @@ export default async function ConversationPage({ params, searchParams }: { param
           initial={initial}
           info={{ conversation: { id, kind: c.kind, title: c.title, description: c.description, archived: c.archived }, me: { id: me.id, role: me.role },
             members: active.map((m) => ({ id: m.id, name: m.name, title: m.title, avatarFileId: m.avatarFileId })), everyone,
-            member: access.member, manage: access.manage, muted: mem?.muted ?? false }} />
+            member: access.member, manage: access.manage, rename: access.rename, muted: mem?.muted ?? false }} />
       </div>
     </div>
   );
