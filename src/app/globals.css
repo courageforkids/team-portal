@@ -179,8 +179,9 @@ a, img, button, [role="button"], nav, header { -webkit-touch-callout: none; }
 nav, header, button, [role="button"], a { -webkit-user-select: none; user-select: none; }
 
 /* Screen-to-screen transition and tap feedback */
-@keyframes page-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-.page-enter { animation: page-enter .22s ease-out both; }
+@keyframes page-enter { from { opacity: 0; } to { opacity: 1; } }
+/* Fade only: a transform here would trap position:fixed screens (like chat) inside the page on iPhone. */
+.page-enter { animation: page-enter .2s ease-out; }
 button:not(:disabled), nav a, a.card, [role="button"] { transition: transform .12s ease, background-color .15s, color .15s, border-color .15s, box-shadow .15s, opacity .15s; }
 button:not(:disabled):active, nav a:active, [role="button"]:active { transform: scale(.96); }
 a.card:active { transform: scale(.99); }
