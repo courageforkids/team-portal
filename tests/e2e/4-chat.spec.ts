@@ -157,3 +157,34 @@ test("members can rename a direct chat, and the menu shows live counts", async (
   expect(counts.tasks).toBeGreaterThanOrEqual(Math.min(n, 1) ? 1 : 0);
   void request;
 });
+
+test("reactions and replies; messages show instantly", async ({ browser }) => {
+  const [team] = await sql`select id from conversations where kind = 'team'`;
+  const julia = await as(browser, "julia");
+  const isaac = await as(browser, "isaac");
+  await julia.page.goto(`/messages/${team.id}`);
+  await isaac.page.goto(`/messages/${team.id}`);
+  const text = `React to me ${Date.now()}`;
+  await julia.page.locator("#composer").fill(text);
+  await julia.page.getByRole("button", { name: "Send" }).click();
+  await expect(julia.page.locator(`[id^="m-"]`, { hasText: text })).toBeVisible(); // appears right away
+  const row = isaac.page.locator(`[id^="m-"]`, { hasText: text }).last();
+  await expect(row).toBeVisible({ timeout: 15_000 });
+
+  // Isaac reacts ❤️ from the message menu; Julia sees it live
+  await row.getByRole("button", { name: "Message options" }).click();
+  await isaac.page.getByRole("button", { name: "React ❤️" }).click();
+  await expect(julia.page.locator(`[id^="m-"]`, { hasText: text }).last().getByRole("button", { name: /❤️ 1: Isaac/ })).toBeVisible({ timeout: 15_000 });
+
+  // Isaac replies to it
+  await row.getByRole("button", { name: "Message options" }).click();
+  await isaac.page.getByRole("button", { name: "Reply", exact: true }).click();
+  await expect(isaac.page.getByText(/Replying to Julia/)).toBeVisible();
+  await isaac.page.locator("#composer").fill("Replying here");
+  await isaac.page.getByRole("button", { name: "Send" }).click();
+  const reply = julia.page.locator(`[id^="m-"]`, { hasText: "Replying here" }).last();
+  await expect(reply).toBeVisible({ timeout: 15_000 });
+  await expect(reply.getByText(text)).toBeVisible(); // quoted original
+  const [m] = await sql`select reply_to_id from messages where body = 'Replying here' order by created_at desc limit 1`;
+  expect(m.reply_to_id).toBeTruthy();
+});

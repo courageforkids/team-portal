@@ -2,7 +2,7 @@
 import { and, eq, inArray, lt, or, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { conversationMembers, conversations, messages, users } from "@/db/schema";
+import { conversationMembers, conversations, messageReactions, messages, users } from "@/db/schema";
 import { actionAdmin, actionUser, AuthError } from "./auth";
 import { all, filesOf, safe, str, UserError } from "./safe-action";
 import { addSystemMessage, conversationAccess, dmKeyFor, ensureTeamConversation, markRead } from "./chat";
@@ -48,7 +48,12 @@ export async function sendMessageAction(_: unknown, fd: FormData): Promise<Actio
     if (!body && !uploads.length) throw new UserError("Type a message first.");
     if (!(await rateLimit(`chat:${me.id}`, 30, 60))) throw new UserError("You're sending messages too fast. Wait a moment.");
     const prepared = await prepareUploads(uploads);
-    const [msg] = await db.insert(messages).values({ conversationId, authorId: me.id, body }).returning();
+    // Swipe-to-reply: only to a message in the same chat.
+    const replyRaw = str(fd, "replyToId");
+    const replyToId = replyRaw && /^[0-9a-f-]{36}$/.test(replyRaw)
+      ? (await db.select({ id: messages.id }).from(messages).where(and(eq(messages.id, replyRaw), eq(messages.conversationId, conversationId))).limit(1))[0]?.id ?? null
+      : null;
+    const [msg] = await db.insert(messages).values({ conversationId, authorId: me.id, body, replyToId }).returning();
     await db.update(conversationMembers).set({ typingAt: null }).where(and(eq(conversationMembers.conversationId, conversationId), eq(conversationMembers.userId, me.id)));
     if (prepared.length) {
       try { await storePrepared(prepared, { type: "message", id: msg.id }, me.id); }
@@ -254,4 +259,23 @@ export async function archiveWorkGroupAction(conversationId: string, archived: b
 
 export async function ensureTeamChatAction(): Promise<ActionResult> {
   return safe(async () => { await actionUser(); await ensureTeamConversation(); return { ok: true }; });
+}
+
+const REACTIONS = ["❤️", "👍", "😂", "😮", "😢", "🙏"];
+
+/** Tapback: one reaction per person per message. Same emoji again removes it. */
+export async function reactAction(messageId: string, emoji: string): Promise<ActionResult> {
+  return safe(async () => {
+    const me = await actionUser();
+    if (!REACTIONS.includes(emoji)) throw new UserError("Pick one of the reactions.");
+    const [m] = await db.select({ id: messages.id, conversationId: messages.conversationId, deletedAt: messages.deletedAt }).from(messages).where(eq(messages.id, uuid.parse(messageId)));
+    if (!m || m.deletedAt) throw new UserError("That message isn't available.");
+    const access = await conversationAccess(me, m.conversationId);
+    if (!access?.post) throw new AuthError("Only people in this chat can react.");
+    const [cur] = await db.select().from(messageReactions).where(and(eq(messageReactions.messageId, m.id), eq(messageReactions.userId, me.id)));
+    if (cur?.emoji === emoji) await db.delete(messageReactions).where(and(eq(messageReactions.messageId, m.id), eq(messageReactions.userId, me.id)));
+    else await db.insert(messageReactions).values({ messageId: m.id, userId: me.id, emoji }).onConflictDoUpdate({ target: [messageReactions.messageId, messageReactions.userId], set: { emoji, createdAt: new Date() } });
+    await db.update(messages).set({ reactedAt: new Date() }).where(eq(messages.id, m.id));
+    return { ok: true };
+  });
 }

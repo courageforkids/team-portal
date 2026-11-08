@@ -33,7 +33,7 @@ export function UserMenu({ name, title, avatarFileId, compact }: { name: string;
           <div className="px-2.5 py-2"><div className="truncate text-sm font-semibold">{name}</div><div className="truncate text-xs text-muted">{title}</div></div>
           <div className="px-2.5 pb-2"><ThemeToggle /></div>
           <Link role="menuitem" href="/profile" onClick={() => setOpen(false)} className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg-2 hover:bg-surface-2"><UserRound className="h-4 w-4" />Profile & preferences</Link>
-          <form action={signOutAction}>
+          <form action={signOutAction} onSubmit={() => { try { void caches.keys().then((ks) => ks.forEach((k) => caches.delete(k))); } catch { /* ignore */ } }}>
             <button role="menuitem" className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-fg-2 hover:bg-surface-2"><LogOut className="h-4 w-4" />Sign out</button>
           </form>
         </div>

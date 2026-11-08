@@ -1,7 +1,7 @@
 import "server-only";
 import { and, asc, desc, eq, gt, inArray, lt, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { conversationMembers, conversations, files, messages, users } from "@/db/schema";
+import { conversationMembers, conversations, files, messageReactions, messages, users } from "@/db/schema";
 import type { CurrentUser } from "./auth";
 
 /**
@@ -106,10 +106,14 @@ export async function unreadMessageTotal(userId: string) {
 
 export type ChatMessage = {
   id: string; authorId: string | null; authorName: string; authorAvatar: string | null; body: string; system: boolean;
-  createdAt: string; editedAt: string | null; deleted: boolean; files: { id: string; filename: string; mimeType: string; size: number }[];
+  createdAt: string; editedAt: string | null; deleted: boolean; files: { id: string; filename: string; mimeType: string; size: number; localUrl?: string }[];
+  reactions: { emoji: string; count: number; names: string[]; mine: boolean }[];
+  replyTo: { id: string; authorName: string; body: string; hasImage: boolean } | null;
+  /** Client-only: sending (optimistic) or failed. */
+  pending?: "sending" | "failed";
 };
 
-export async function loadMessages(conversationId: string, opts: { before?: Date; after?: Date; limit?: number } = {}): Promise<ChatMessage[]> {
+export async function loadMessages(conversationId: string, opts: { before?: Date; after?: Date; limit?: number; viewerId?: string } = {}): Promise<ChatMessage[]> {
   const limit = Math.min(opts.limit ?? 50, 100);
   const where = and(
     eq(messages.conversationId, conversationId),
@@ -119,15 +123,44 @@ export async function loadMessages(conversationId: string, opts: { before?: Date
   const rows = await db.select({ m: messages, name: users.name, avatar: users.avatarFileId }).from(messages)
     .leftJoin(users, eq(users.id, messages.authorId)).where(where)
     .orderBy(opts.after ? asc(messages.createdAt) : desc(messages.createdAt)).limit(limit);
-  const list = opts.after ? rows : rows.reverse();
+  return shapeMessages(opts.after ? rows : rows.reverse(), opts.viewerId);
+}
+
+/** Messages whose reactions changed since a time (so open chats update reactions on older messages). */
+export async function loadReactionChanges(conversationId: string, since: Date, viewerId?: string) {
+  const rows = await db.select({ m: messages, name: users.name, avatar: users.avatarFileId }).from(messages)
+    .leftJoin(users, eq(users.id, messages.authorId))
+    .where(and(eq(messages.conversationId, conversationId), gt(messages.reactedAt, since))).orderBy(asc(messages.createdAt)).limit(100);
+  return shapeMessages(rows, viewerId);
+}
+
+type MsgRow = { m: typeof messages.$inferSelect; name: string | null; avatar: string | null };
+async function shapeMessages(list: MsgRow[], viewerId?: string): Promise<ChatMessage[]> {
   const ids = list.map((r) => r.m.id);
-  const fileRows = ids.length ? await db.select().from(files).where(and(eq(files.ownerType, "message"), inArray(files.ownerId, ids))) : [];
-  return list.map(({ m, name, avatar }) => ({
-    id: m.id, authorId: m.authorId, authorName: name ?? "Former member", authorAvatar: avatar ?? null,
-    body: m.deletedAt ? "" : m.body, system: m.system, createdAt: m.createdAt.toISOString(), editedAt: m.editedAt?.toISOString() ?? null,
-    deleted: !!m.deletedAt,
-    files: m.deletedAt ? [] : fileRows.filter((f) => f.ownerId === m.id).map((f) => ({ id: f.id, filename: f.filename, mimeType: f.mimeType, size: f.size })),
-  }));
+  const replyIds = [...new Set(list.map((r) => r.m.replyToId).filter((x): x is string => !!x))];
+  const [fileRows, reactRows, replyRows, replyFiles] = await Promise.all([
+    ids.length ? db.select().from(files).where(and(eq(files.ownerType, "message"), inArray(files.ownerId, ids))) : [],
+    ids.length ? db.select({ messageId: messageReactions.messageId, userId: messageReactions.userId, emoji: messageReactions.emoji, name: users.name })
+      .from(messageReactions).innerJoin(users, eq(users.id, messageReactions.userId)).where(inArray(messageReactions.messageId, ids)).orderBy(asc(messageReactions.createdAt)) : [],
+    replyIds.length ? db.select({ id: messages.id, body: messages.body, deletedAt: messages.deletedAt, name: users.name }).from(messages).leftJoin(users, eq(users.id, messages.authorId)).where(inArray(messages.id, replyIds)) : [],
+    replyIds.length ? db.select({ ownerId: files.ownerId }).from(files).where(and(eq(files.ownerType, "message"), inArray(files.ownerId, replyIds))) : [],
+  ]);
+  return list.map(({ m, name, avatar }) => {
+    const rs = reactRows.filter((r) => r.messageId === m.id);
+    const reactions = [...new Set(rs.map((r) => r.emoji))].map((emoji) => {
+      const who = rs.filter((r) => r.emoji === emoji);
+      return { emoji, count: who.length, names: who.map((w) => w.name.split(" ")[0]), mine: !!viewerId && who.some((w) => w.userId === viewerId) };
+    });
+    const rp = m.replyToId ? replyRows.find((r) => r.id === m.replyToId) : undefined;
+    return {
+      id: m.id, authorId: m.authorId, authorName: name ?? "Former member", authorAvatar: avatar ?? null,
+      body: m.deletedAt ? "" : m.body, system: m.system, createdAt: m.createdAt.toISOString(), editedAt: m.editedAt?.toISOString() ?? null,
+      deleted: !!m.deletedAt,
+      files: m.deletedAt ? [] : fileRows.filter((f) => f.ownerId === m.id).map((f) => ({ id: f.id, filename: f.filename, mimeType: f.mimeType, size: f.size })),
+      reactions: m.deletedAt ? [] : reactions,
+      replyTo: rp ? { id: rp.id, authorName: rp.name ?? "Former member", body: rp.deletedAt ? "Message removed" : rp.body.slice(0, 140), hasImage: replyFiles.some((f) => f.ownerId === rp.id) } : null,
+    };
+  });
 }
 
 export async function conversationMembersList(conversationId: string) {

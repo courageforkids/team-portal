@@ -11,6 +11,7 @@ import { UserMenu } from "@/components/shell/user-menu";
 import { NotificationBell } from "@/components/shell/notification-bell";
 import { computeBadges } from "@/server/badges";
 import { BadgesProvider } from "@/components/shell/badges";
+import { AppGestures, BackButton, PageTransition } from "@/components/shell/app-gestures";
 
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -39,14 +40,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <div className="md:pl-[248px]">
         {/* Top bar */}
         <header className="sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b border-line bg-bg/85 px-4 backdrop-blur md:h-16 md:px-8">
-          <div className="md:hidden"><Brand orgName={s.orgName} /></div>
+          <div className="flex items-center md:hidden"><BackButton /><Brand orgName={s.orgName} /></div>
           <div className="hidden text-sm text-muted md:block"><span className="italic">{s.tagline}</span></div>
           <div className="flex items-center gap-1.5">
             <NotificationBell count={badges.notifications} />
             <div className="md:hidden"><UserMenu name={user.name} title={user.title} avatarFileId={user.avatarFileId} compact /></div>
           </div>
         </header>
-        <main id="main" className="mx-auto w-full max-w-[1240px] px-4 pt-6 pb-28 md:px-8 md:pt-8 md:pb-12">{children}</main>
+        <main id="main" className="mx-auto w-full max-w-[1240px] px-4 pt-6 pb-28 md:px-8 md:pt-8 md:pb-12"><PageTransition>{children}</PageTransition></main>
+        <AppGestures />
       </div>
       <MobileNav role={user.role} canReview={canReview} canDonations={canDonations} badges={badges} orgName={s.orgName} />
     </div>

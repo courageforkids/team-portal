@@ -8,8 +8,8 @@ import { sessions, users } from "@/db/schema";
 import { hashToken, randomToken } from "./crypto";
 
 export const SESSION_COOKIE = "cfk_session";
-const SESSION_DAYS = 30;
-const RENEW_WITHIN_DAYS = 15;
+const SESSION_DAYS = 365; // stay signed in like a phone app; renews as long as the app gets used
+const RENEW_WITHIN_DAYS = 335;
 
 export type Role = "admin" | "leader" | "volunteer";
 export type CurrentUser = {

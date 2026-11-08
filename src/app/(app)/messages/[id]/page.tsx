@@ -21,7 +21,7 @@ export default async function ConversationPage({ params, searchParams }: { param
   if (!access?.read) notFound();
   const oversight = sp.all === "1" || !access.member;
   const [{ conversations, everyone }, members, initial] = await Promise.all([
-    chatListData(me, oversight), conversationMembersList(id), loadMessages(id, { limit: 50 }),
+    chatListData(me, oversight), conversationMembersList(id), loadMessages(id, { limit: 50, viewerId: me.id }),
   ]);
   const mem = access.member ? (await db.select().from(conversationMembers).where(and(eq(conversationMembers.conversationId, id), eq(conversationMembers.userId, me.id))).limit(1))[0] : null;
   const active = members.filter((m) => m.status === "active");
@@ -39,7 +39,7 @@ export default async function ConversationPage({ params, searchParams }: { param
     <div className="grid gap-4 md:h-[calc(100dvh-8.5rem)] md:grid-cols-[320px_1fr]">
       <div className="hidden min-h-0 md:block"><ChatList initial={conversations} everyone={everyone} me={{ id: me.id, role: me.role }} oversight={oversight} /></div>
       {/* On phones the conversation fills the screen between the top bar and the bottom tabs. */}
-      <div data-kb-fit className="fixed inset-x-0 top-14 bottom-[calc(58px+env(safe-area-inset-bottom))] z-10 min-h-0 bg-surface md:static md:z-auto md:bg-transparent">
+      <div data-kb-fit data-no-ptr className="fixed inset-x-0 top-14 bottom-[calc(58px+env(safe-area-inset-bottom))] z-10 min-h-0 bg-surface md:static md:z-auto md:bg-transparent">
         <ConversationView key={id} me={{ id: me.id, role: me.role }} highlight={sp.highlight}
           header={{ id, kind: c.kind, title, subtitle, description: c.description, people, member: access.member, canPost: access.post, archived: c.archived, muted: mem?.muted ?? false, tasks: groupTasks }}
           initial={initial}

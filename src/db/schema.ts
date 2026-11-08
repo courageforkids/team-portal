@@ -490,6 +490,10 @@ export const conversationMembers = pgTable("conversation_members", {
 
 export const messages = pgTable("messages", {
   id: uuid("id").primaryKey().defaultRandom(),
+  /** Swipe-to-reply: the message this one answers. */
+  replyToId: uuid("reply_to_id"),
+  /** Bumped whenever reactions change, so open chats pick up the change. */
+  reactedAt: timestamp("reacted_at", { withTimezone: true }),
   conversationId: uuid("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
   authorId: uuid("author_id").references(() => users.id, { onDelete: "set null" }),
   body: text("body").notNull().default(""),
@@ -688,3 +692,11 @@ export const donations = pgTable("donations", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("donations_donor_idx").on(t.donorId), index("donations_received_idx").on(t.receivedOn)]);
 
+
+/** One reaction (❤️ 👍 😂 …) per person per message, like iMessage tapbacks. */
+export const messageReactions = pgTable("message_reactions", {
+  messageId: uuid("message_id").notNull().references(() => messages.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  emoji: text("emoji").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.messageId, t.userId] })]);

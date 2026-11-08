@@ -3,7 +3,7 @@ import { and, eq, gt, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { conversationMembers, users } from "@/db/schema";
 import { getCurrentUser } from "@/server/auth";
-import { conversationAccess, loadMessages, markRead } from "@/server/chat";
+import { conversationAccess, loadMessages, loadReactionChanges, markRead } from "@/server/chat";
 
 /** New (after=) or older (before=) messages for one conversation. Used by the chat screen to update live. */
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -18,11 +18,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const msgs = await loadMessages(id, {
     after: after && !isNaN(Date.parse(after)) ? new Date(after) : undefined,
     before: before && !isNaN(Date.parse(before)) ? new Date(before) : undefined,
-    limit: before ? 40 : 100,
+    limit: before ? 40 : 100, viewerId: me.id,
   });
+  const rsince = sp.get("rsince");
+  const changed = rsince && !isNaN(Date.parse(rsince)) ? await loadReactionChanges(id, new Date(rsince), me.id) : [];
   if (access.member && msgs.length && !before) await markRead(id, me.id);
   // Who else is typing right now (pinged in the last 6 seconds).
   const typing = before ? [] : (await db.select({ name: users.name }).from(conversationMembers).innerJoin(users, eq(users.id, conversationMembers.userId))
     .where(and(eq(conversationMembers.conversationId, id), ne(conversationMembers.userId, me.id), gt(conversationMembers.typingAt, new Date(Date.now() - 6000))))).map((r) => r.name.split(" ")[0]);
-  return NextResponse.json({ messages: msgs, typing }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({ messages: msgs, changed, typing, now: new Date().toISOString() }, { headers: { "Cache-Control": "no-store" } });
 }

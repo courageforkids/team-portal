@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Info, ImagePlus, Loader2, MoreHorizontal, Send, X, Lock, BellOff, ListChecks } from "lucide-react";
+import { ArrowLeft, Info, ImagePlus, Loader2, MoreHorizontal, Send, X, Lock, BellOff, ListChecks, Reply, RotateCw } from "lucide-react";
 import { Avatar, AvatarStack } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -10,7 +10,8 @@ import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/cn";
 import { asSticker, compressImage, isStickerName } from "@/lib/compress-image";
 import { Composer } from "./composer";
-import { deleteMessageAction, editMessageAction, reportMessageAction, sendMessageAction, markReadAction } from "@/server/chat-actions";
+import { deleteMessageAction, editMessageAction, reactAction, reportMessageAction, sendMessageAction, markReadAction } from "@/server/chat-actions";
+import { PhotoViewer } from "./photo-viewer";
 import type { ChatMessage } from "@/server/chat";
 import { ChatInfo, type ChatInfoProps } from "./chat-info";
 
@@ -49,9 +50,14 @@ export function ConversationView({ me, header, initial, info, highlight }: {
   const [typing, setTyping] = useState<string[]>([]);
   const lastPing = useRef(0);
   const [files, setFiles] = useState<File[]>([]);
-  const [sending, setSending] = useState(false);
+  const sending = false;
   const [infoOpen, setInfoOpen] = useState(false);
   const [menuFor, setMenuFor] = useState<ChatMessage | null>(null);
+  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
+  const [viewer, setViewer] = useState<{ src: string; alt: string } | null>(null);
+  const [online, setOnline] = useState(true);
+  const outbox = useRef(new Map<string, FormData>()); // unsent messages, keyed by their temporary id
+  const rsince = useRef<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -67,12 +73,19 @@ export function ConversationView({ me, header, initial, info, highlight }: {
     });
   }, []);
 
-  const lastAt = items.at(-1)?.createdAt;
+  const lastAt = items.filter((m) => !m.pending).at(-1)?.createdAt;
   const poll = useCallback(async () => {
     try {
-      const url = `/api/chat/${header.id}${lastAt ? `?after=${encodeURIComponent(lastAt)}` : ""}`;
-      const r = await fetch(url, { cache: "no-store" });
-      if (r.ok) { const d = await r.json(); merge(d.messages); setTyping(d.typing ?? []); }
+      const q = new URLSearchParams();
+      if (lastAt) q.set("after", lastAt);
+      if (rsince.current) q.set("rsince", rsince.current);
+      const r = await fetch(`/api/chat/${header.id}?${q}`, { cache: "no-store" });
+      if (r.ok) {
+        const d = await r.json();
+        merge([...d.messages, ...(d.changed ?? [])]);
+        setTyping(d.typing ?? []);
+        if (d.now) rsince.current = d.now;
+      }
     } catch { /* offline: try again next tick */ }
   }, [header.id, lastAt, merge]);
 
@@ -107,18 +120,68 @@ export function ConversationView({ me, header, initial, info, highlight }: {
     } finally { setLoadingOlder(false); }
   };
 
+  // Sends one queued message; on success the real message replaces the temporary one.
+  const deliver = useCallback(async (tempId: string) => {
+    const fd = outbox.current.get(tempId);
+    if (!fd) return;
+    setItems((prev) => prev.map((m) => (m.id === tempId ? { ...m, pending: "sending" } : m)));
+    try {
+      const r = await sendMessageAction(null, fd);
+      if (r.ok) {
+        outbox.current.delete(tempId);
+        setItems((prev) => prev.filter((m) => m.id !== tempId));
+        await poll();
+        return;
+      }
+      toast.push("error", r.error);
+    } catch { /* offline or server unreachable */ }
+    setItems((prev) => prev.map((m) => (m.id === tempId ? { ...m, pending: "failed" } : m)));
+  }, [poll, toast]);
+
+  // Messages appear instantly; they send in the background (and wait for a connection if offline).
   const send = async () => {
     const body = text.trim();
     if ((!body && !files.length) || sending) return;
-    setSending(true);
     const fd = new FormData();
     fd.append("conversationId", header.id);
     fd.append("body", body);
     files.forEach((f) => fd.append("files", f));
-    const r = await sendMessageAction(null, fd);
-    setSending(false);
-    if (r.ok) { setText(""); setClearSignal((n) => n + 1); setFiles([]); atBottom.current = true; await poll(); }
-    else toast.push("error", r.error);
+    if (replyTo) fd.append("replyToId", replyTo.id);
+    const tempId = `temp-${Date.now()}`;
+    outbox.current.set(tempId, fd);
+    const temp: ChatMessage = {
+      id: tempId, authorId: me.id, authorName: "You", authorAvatar: null, body, system: false, createdAt: new Date().toISOString(), editedAt: null, deleted: false,
+      files: files.map((f, i) => ({ id: `${tempId}-${i}`, filename: f.name, mimeType: f.type, size: f.size, localUrl: URL.createObjectURL(f) })),
+      reactions: [], replyTo: replyTo ? { id: replyTo.id, authorName: replyTo.authorName, body: replyTo.body.slice(0, 140), hasImage: replyTo.files.length > 0 } : null,
+      pending: navigator.onLine ? "sending" : "failed",
+    };
+    setItems((prev) => [...prev, temp]);
+    setText(""); setClearSignal((n) => n + 1); setFiles([]); setReplyTo(null); atBottom.current = true;
+    if (navigator.onLine) void deliver(tempId);
+  };
+
+  // Back online: send anything that was waiting.
+  useEffect(() => {
+    setOnline(navigator.onLine);
+    const up = () => { setOnline(true); for (const id of outbox.current.keys()) void deliver(id); void poll(); };
+    const down = () => setOnline(false);
+    window.addEventListener("online", up); window.addEventListener("offline", down);
+    return () => { window.removeEventListener("online", up); window.removeEventListener("offline", down); };
+  }, [deliver, poll]);
+
+  const react = (m: ChatMessage, emoji: string) => {
+    // Show it right away, then save.
+    setItems((prev) => prev.map((x) => {
+      if (x.id !== m.id) return x;
+      const had = x.reactions.find((r) => r.mine)?.emoji;
+      let rs = x.reactions.map((r) => (r.mine ? { ...r, count: r.count - 1, mine: false, names: r.names.filter((n) => n !== "You") } : r)).filter((r) => r.count > 0);
+      if (had !== emoji) {
+        const ex = rs.find((r) => r.emoji === emoji);
+        rs = ex ? rs.map((r) => (r.emoji === emoji ? { ...r, count: r.count + 1, mine: true, names: [...r.names, "You"] } : r)) : [...rs, { emoji, count: 1, mine: true, names: ["You"] }];
+      }
+      return { ...x, reactions: rs };
+    }));
+    void reactAction(m.id, emoji).then((r) => { if (!r.ok) toast.push("error", r.error); void poll(); });
   };
 
   // Stickers and pasted photos go into the message box; they send when you press Send.
@@ -151,6 +214,7 @@ export function ConversationView({ me, header, initial, info, highlight }: {
   }, [items]);
 
   const isGroupish = header.kind !== "dm";
+  const canInteract = header.canPost;
   return (
     <section className="flex h-full min-h-0 flex-col bg-surface md:rounded-xl md:border md:border-line">
       {/* Header */}
@@ -189,7 +253,8 @@ export function ConversationView({ me, header, initial, info, highlight }: {
               const others = m.files.filter((f) => !isStickerName(f.filename));
               const showBubble = m.deleted || !!m.body || others.length > 0;
               return (
-                <div key={m.id} id={`m-${m.id}`} className={cn("group flex gap-2", mine ? "justify-end" : "justify-start", first ? "mt-3" : "mt-0.5")}>
+                <SwipeRow key={m.id} id={`m-${m.id}`} enabled={canInteract && !m.deleted && !m.pending} onReply={() => setReplyTo(m)} onLongPress={() => setMenuFor(m)}
+                  className={cn("group flex gap-2", mine ? "justify-end" : "justify-start", first ? "mt-3" : "mt-0.5", m.reactions.length > 0 && "mb-3")}>
                   {!mine && isGroupish && <div className="w-7 shrink-0">{first && <Avatar name={m.authorName} fileId={m.authorAvatar} size={28} />}</div>}
                   <div className={cn("flex max-w-[78%] flex-col", mine ? "items-end" : "items-start")}>
                     {first && !mine && isGroupish && <span className="mb-0.5 ml-1 text-[11px] font-semibold text-muted">{m.authorName}</span>}
@@ -198,21 +263,29 @@ export function ConversationView({ me, header, initial, info, highlight }: {
                       {stickers.length > 0 && (
                         <div className={cn("flex flex-wrap gap-1", highlight === m.id && !showBubble && "rounded-xl ring-2 ring-accent")}>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          {stickers.map((f) => <img key={f.id} src={`/api/files/${f.id}?inline=1`} alt="Sticker" loading="lazy" className="h-28 w-auto max-w-[160px] object-contain" />)}
+                          {stickers.map((f) => <img key={f.id} src={f.localUrl ?? `/api/files/${f.id}?inline=1`} alt="Sticker" loading="lazy" className="h-28 w-auto max-w-[160px] object-contain" />)}
                         </div>
                       )}
                       {showBubble && (
                       <div className={cn("rounded-2xl px-3.5 py-2 text-[15px] leading-snug shadow-soft",
                         m.deleted ? "border border-dashed border-line bg-transparent italic text-faint" : mine ? "bg-brand text-brand-fg" : "bg-surface-2 text-fg",
+                        m.pending === "sending" && "opacity-70", m.pending === "failed" && "opacity-60",
                         highlight === m.id && "ring-2 ring-accent")}>
                         {m.deleted ? "Message removed" : (<>
+                          {m.replyTo && (
+                            <button type="button" onClick={() => document.getElementById(`m-${m.replyTo!.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}
+                              className={cn("mb-1.5 block w-full rounded-lg border-l-[3px] px-2 py-1 text-left text-xs", mine ? "border-white/70 bg-white/15" : "border-brand bg-surface")}>
+                              <span className="block font-semibold">{m.replyTo.authorName}</span>
+                              <span className="line-clamp-2 opacity-80">{m.replyTo.body || (m.replyTo.hasImage ? "📷 Photo" : "")}</span>
+                            </button>
+                          )}
                           {others.length > 0 && (
                             <div className={cn("mb-1 grid gap-1", others.length > 1 ? "grid-cols-2" : "grid-cols-1")}>
                               {others.map((f) => f.mimeType.startsWith("image/") && !f.mimeType.includes("hei") ? (
-                                <a key={f.id} href={`/api/files/${f.id}?inline=1`} target="_blank" rel="noopener" className="block overflow-hidden rounded-xl">
+                                <button type="button" key={f.id} onClick={() => setViewer({ src: f.localUrl ?? `/api/files/${f.id}?inline=1`, alt: f.filename })} className="block overflow-hidden rounded-xl" aria-label={`Open photo ${f.filename}`}>
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img src={`/api/files/${f.id}?inline=1`} alt={f.filename} loading="lazy" className="max-h-64 w-full object-cover" />
-                                </a>
+                                  <img src={f.localUrl ?? `/api/files/${f.id}?inline=1`} alt={f.filename} loading="lazy" className="max-h-64 w-full object-cover" />
+                                </button>
                               ) : <a key={f.id} href={`/api/files/${f.id}`} className="underline">{f.filename}</a>)}
                             </div>
                           )}
@@ -221,16 +294,32 @@ export function ConversationView({ me, header, initial, info, highlight }: {
                       </div>
                       )}
                       </div>
-                      {!m.deleted && (
+                      {!m.deleted && !m.pending && (
                         <button onClick={() => setMenuFor(m)} aria-label="Message options"
                           className="rounded-full p-1 text-faint opacity-60 transition hover:bg-surface-2 hover:text-fg md:opacity-0 md:group-hover:opacity-100 focus:opacity-100">
                           <MoreHorizontal className="h-4 w-4" />
                         </button>
                       )}
                     </div>
-                    <span className="mx-1 mt-0.5 text-[10px] text-faint">{timeOf(m.createdAt)}{m.editedAt && !m.deleted ? " · edited" : ""}</span>
+                    {m.reactions.length > 0 && (
+                      <div className={cn("-mt-2 flex gap-1", mine ? "mr-2" : "ml-2")}>
+                        {m.reactions.map((r) => (
+                          <button key={r.emoji} onClick={() => canInteract && react(m, r.emoji)} title={r.names.join(", ")} aria-label={`${r.emoji} ${r.count}: ${r.names.join(", ")}`}
+                            className={cn("rounded-full border px-1.5 py-0.5 text-xs shadow-soft", r.mine ? "border-brand bg-brand-soft" : "border-line bg-surface")}>
+                            {r.emoji}{r.count > 1 && <span className="ml-0.5 font-semibold tabular-nums">{r.count}</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {m.pending === "failed" ? (
+                      <button onClick={() => (navigator.onLine ? void deliver(m.id) : toast.push("error", "You're offline. It will send when you're back online."))} className="mx-1 mt-0.5 inline-flex items-center gap-1 text-[11px] font-semibold text-bad">
+                        <RotateCw className="h-3 w-3" />{online ? "Not sent · Tap to retry" : "Waiting for connection…"}
+                      </button>
+                    ) : (
+                      <span className="mx-1 mt-0.5 text-[10px] text-faint">{m.pending === "sending" ? "Sending…" : timeOf(m.createdAt)}{m.editedAt && !m.deleted ? " · edited" : ""}</span>
+                    )}
                   </div>
-                </div>
+                </SwipeRow>
               );
             })}
           </div>
@@ -248,6 +337,14 @@ export function ConversationView({ me, header, initial, info, highlight }: {
       {/* Composer */}
       {header.canPost ? (
         <div className="border-t border-line p-2.5 sm:p-3">
+          {!online && <p className="mb-2 rounded-lg bg-warn-soft px-3 py-1.5 text-center text-xs font-medium text-warn">You're offline. Messages will send when you're back online.</p>}
+          {replyTo && (
+            <div className="mb-2 flex items-center gap-2 rounded-lg border-l-[3px] border-brand bg-surface-2 px-3 py-1.5 text-xs">
+              <Reply className="h-3.5 w-3.5 shrink-0 text-muted" />
+              <span className="min-w-0 flex-1"><span className="font-semibold">Replying to {replyTo.authorId === me.id ? "yourself" : replyTo.authorName}</span><span className="block truncate text-muted">{replyTo.body || (replyTo.files.length ? "📷 Photo" : "")}</span></span>
+              <button onClick={() => setReplyTo(null)} aria-label="Cancel reply" className="rounded p-1 text-muted hover:text-fg"><X className="h-3.5 w-3.5" /></button>
+            </div>
+          )}
           {files.length > 0 && (
             <div className="mb-2 flex gap-2 overflow-x-auto">
               {files.map((f, i) => (
@@ -267,7 +364,7 @@ export function ConversationView({ me, header, initial, info, highlight }: {
               // Let others see "typing…" (at most one ping every 3 seconds).
               if (t.trim() && Date.now() - lastPing.current > 3000) { lastPing.current = Date.now(); void fetch(`/api/chat/${header.id}/typing`, { method: "POST" }).catch(() => {}); }
             }} onEnter={send} onImages={onImages} />
-            <button onClick={send} disabled={sending || (!text.trim() && !files.length)} aria-label="Send"
+            <button onClick={send} disabled={!text.trim() && !files.length} aria-label="Send"
               className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand text-brand-fg transition hover:bg-brand-hover disabled:opacity-40">
               {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </button>
@@ -280,7 +377,8 @@ export function ConversationView({ me, header, initial, info, highlight }: {
       )}
 
       <ChatInfo {...info} open={infoOpen} onClose={() => setInfoOpen(false)} />
-      <MessageMenu m={menuFor} me={me} onClose={() => setMenuFor(null)} onChanged={() => { setMenuFor(null); poll(); router.refresh(); }} refetch={async () => {
+      {viewer && <PhotoViewer src={viewer.src} alt={viewer.alt} onClose={() => setViewer(null)} />}
+      <MessageMenu m={menuFor} me={me} canInteract={canInteract} onReact={(m, e) => { react(m, e); setMenuFor(null); }} onReply={(m) => { setReplyTo(m); setMenuFor(null); }} onClose={() => setMenuFor(null)} onChanged={() => { setMenuFor(null); poll(); router.refresh(); }} refetch={async () => {
         const from = new Date(new Date(items[0]?.createdAt ?? 0).getTime() - 1).toISOString();
         const r = await fetch(`/api/chat/${header.id}?after=${encodeURIComponent(from)}`, { cache: "no-store" });
         if (r.ok) { const all: ChatMessage[] = (await r.json()).messages; setItems((prev) => prev.map((p) => all.find((x) => x.id === p.id) ?? p)); }
@@ -289,7 +387,35 @@ export function ConversationView({ me, header, initial, info, highlight }: {
   );
 }
 
-function MessageMenu({ m, me, onClose, onChanged, refetch }: { m: ChatMessage | null; me: { id: string; role: string }; onClose: () => void; onChanged: () => void; refetch: () => Promise<void> }) {
+const REACTIONS = ["❤️", "👍", "😂", "😮", "😢", "🙏"];
+
+/** A message row that can be swiped right to reply (phones) or long-pressed for the menu. */
+function SwipeRow({ enabled, onReply, onLongPress, className, children, id }: { enabled: boolean; onReply: () => void; onLongPress: () => void; className: string; children: React.ReactNode; id: string }) {
+  const [dx, setDx] = useState(0);
+  const st = useRef<{ x: number; y: number; t?: ReturnType<typeof setTimeout>; locked?: "h" | "v" } | null>(null);
+  return (
+    <div id={id} className={cn(className, "relative")} style={{ transform: dx ? `translateX(${dx}px)` : undefined, transition: dx ? "none" : "transform .2s" }}
+      onContextMenu={(e) => { if (enabled) { e.preventDefault(); onLongPress(); } }}
+      onTouchStart={(e) => {
+        if (!enabled) return;
+        const t = e.touches[0];
+        st.current = { x: t.clientX, y: t.clientY, t: setTimeout(() => { st.current = null; setDx(0); onLongPress(); }, 500) };
+      }}
+      onTouchMove={(e) => {
+        const s = st.current; if (!s) return;
+        const t = e.touches[0]; const mx = t.clientX - s.x, my = t.clientY - s.y;
+        if (Math.abs(mx) > 6 || Math.abs(my) > 6) clearTimeout(s.t);
+        if (!s.locked) s.locked = Math.abs(mx) > Math.abs(my) + 4 ? "h" : Math.abs(my) > 8 ? "v" : undefined;
+        if (s.locked === "h" && mx > 0) setDx(Math.min(70, mx * 0.6));
+      }}
+      onTouchEnd={() => { const s = st.current; if (s) clearTimeout(s.t); if (dx > 45) onReply(); setDx(0); st.current = null; }}>
+      {dx > 10 && <Reply className="absolute -left-7 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" style={{ opacity: Math.min(1, dx / 45) }} aria-hidden />}
+      {children}
+    </div>
+  );
+}
+
+function MessageMenu({ m, me, canInteract, onReact, onReply, onClose, onChanged, refetch }: { m: ChatMessage | null; me: { id: string; role: string }; canInteract: boolean; onReact: (m: ChatMessage, e: string) => void; onReply: (m: ChatMessage) => void; onClose: () => void; onChanged: () => void; refetch: () => Promise<void> }) {
   const [mode, setMode] = useState<"menu" | "edit" | "report">("menu");
   const [value, setValue] = useState("");
   const [busy, start] = useTransition();
@@ -306,6 +432,15 @@ function MessageMenu({ m, me, onClose, onChanged, refetch }: { m: ChatMessage | 
     <Dialog open={!!m} onClose={onClose} title={mode === "edit" ? "Edit message" : mode === "report" ? "Report message" : "Message"} size="sm">
       {mode === "menu" && (
         <div className="space-y-1">
+          {canInteract && (
+            <div className="mb-2 flex justify-between rounded-full bg-surface-2 px-2 py-1.5" role="group" aria-label="React">
+              {REACTIONS.map((e) => (
+                <button key={e} onClick={() => onReact(m, e)} aria-label={`React ${e}`}
+                  className={cn("grid h-10 w-10 place-items-center rounded-full text-2xl transition active:scale-90", m.reactions.find((r) => r.mine)?.emoji === e && "bg-brand-soft ring-2 ring-brand")}>{e}</button>
+              ))}
+            </div>
+          )}
+          {canInteract && <Button variant="ghost" className="w-full justify-start" onClick={() => onReply(m)}><Reply className="h-4 w-4" />Reply</Button>}
           {m.body && <p className="mb-3 line-clamp-3 rounded-lg bg-surface-2 px-3 py-2 text-sm text-fg-2">{m.body}</p>}
           {m.body && <Button variant="ghost" className="w-full justify-start" onClick={() => { navigator.clipboard?.writeText(m.body); toast.push("success", "Copied."); onClose(); }}>Copy text</Button>}
           {mine && m.body && <Button variant="ghost" className="w-full justify-start" onClick={() => setMode("edit")}>Edit</Button>}

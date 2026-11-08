@@ -177,3 +177,11 @@ html { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
    and menus/buttons aren't text-selectable. Message text and form fields stay selectable. */
 a, img, button, [role="button"], nav, header { -webkit-touch-callout: none; }
 nav, header, button, [role="button"], a { -webkit-user-select: none; user-select: none; }
+
+/* Screen-to-screen transition and tap feedback */
+@keyframes page-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.page-enter { animation: page-enter .22s ease-out both; }
+button:not(:disabled), nav a, a.card, [role="button"] { transition: transform .12s ease, background-color .15s, color .15s, border-color .15s, box-shadow .15s, opacity .15s; }
+button:not(:disabled):active, nav a:active, [role="button"]:active { transform: scale(.96); }
+a.card:active { transform: scale(.99); }
+@media (prefers-reduced-motion: reduce) { .page-enter { animation: none; } button:active, nav a:active { transform: none; } }
