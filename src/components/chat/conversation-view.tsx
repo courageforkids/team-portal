@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Info, ImagePlus, Loader2, MoreHorizontal, Send, X, Lock, BellOff, ListChecks, Reply, RotateCw } from "lucide-react";
+import { ArrowLeft, Info, ImagePlus, Loader2, MoreHorizontal, Send, X, Lock, BellOff, ListChecks, Reply, RotateCw, Pin, PinOff, Search } from "lucide-react";
 import { Avatar, AvatarStack } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -10,17 +10,36 @@ import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/cn";
 import { asSticker, compressImage, isStickerName } from "@/lib/compress-image";
 import { Composer } from "./composer";
-import { deleteMessageAction, editMessageAction, reactAction, reportMessageAction, sendMessageAction, markReadAction } from "@/server/chat-actions";
+import { deleteMessageAction, editMessageAction, pinMessageAction, reactAction, reportMessageAction, sendMessageAction, markReadAction } from "@/server/chat-actions";
+import { mentionHandles, MENTION_RE, type Mentionable } from "@/lib/mentions";
 import { PhotoViewer } from "./photo-viewer";
-import type { ChatMessage } from "@/server/chat";
+import type { ChatMessage, PinnedMessage } from "@/server/chat";
+
+const EDIT_WINDOW_MS = 15 * 60_000;
 import { ChatInfo, type ChatInfoProps } from "./chat-info";
 
 const URL_RE = /(https?:\/\/[^\s<]+[^\s<.,:;"')\]!?])/g;
-function Linkified({ text }: { text: string }) {
+/** Message text with links made tappable and @mentions of people in the chat in bold (yours highlighted). */
+function Linkified({ text, handles, myHandle }: { text: string; handles?: Set<string>; myHandle?: string }) {
   const parts = text.split(URL_RE);
   return <>{parts.map((p, i) => (i % 2 === 1
     ? <a key={i} href={p} target="_blank" rel="noopener noreferrer" className="underline decoration-current/40 underline-offset-2 break-all">{p}</a>
-    : <span key={i}>{p}</span>))}</>;
+    : <Mentions key={i} text={p} handles={handles} myHandle={myHandle} />))}</>;
+}
+function Mentions({ text, handles, myHandle }: { text: string; handles?: Set<string>; myHandle?: string }) {
+  if (!handles?.size || !text.includes("@")) return <span>{text}</span>;
+  const out: React.ReactNode[] = [];
+  let last = 0;
+  for (const m of text.matchAll(MENTION_RE)) {
+    const h = m[2].toLowerCase();
+    if (!handles.has(h)) continue;
+    const start = m.index! + m[1].length;
+    out.push(text.slice(last, start));
+    out.push(<span key={start} className={cn("font-semibold", h === myHandle && "rounded bg-accent/30 px-0.5")}>@{m[2]}</span>);
+    last = start + m[2].length + 1;
+  }
+  out.push(text.slice(last));
+  return <span>{out}</span>;
 }
 
 function dayLabel(iso: string) {
@@ -37,13 +56,26 @@ export type ConversationHeader = {
   people: { id: string; name: string; avatarFileId: string | null }[];
   member: boolean; canPost: boolean; archived: boolean; muted: boolean;
   tasks: { id: string; title: string; status: string }[];
+  canPin: boolean; mentionables: Mentionable[];
 };
 
-export function ConversationView({ me, header, initial, info, highlight }: {
+export function ConversationView({ me, header, initial, info, highlight, startedOlder, pins: initialPins }: {
   me: { id: string; role: string }; header: ConversationHeader; initial: ChatMessage[]; info: Omit<ChatInfoProps, "open" | "onClose">; highlight?: string;
+  startedOlder?: boolean; pins: PinnedMessage[];
 }) {
   const [items, setItems] = useState<ChatMessage[]>(initial);
-  const [hasOlder, setHasOlder] = useState(initial.length >= 50);
+  const [hasOlder, setHasOlder] = useState(initial.length >= 50 || !!startedOlder);
+  const [pins, setPins] = useState<PinnedMessage[]>(initialPins);
+  const [pinsOpen, setPinsOpen] = useState(false);
+  const [focus, setFocus] = useState<string | undefined>(highlight); // message to ring (from a notification, search or a reply quote)
+  const scrollTo = useRef<string | undefined>(highlight);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<{ id: string; authorName: string; body: string; createdAt: string }[] | null>(null);
+  const handleInfo = useMemo(() => {
+    const hs = mentionHandles(header.mentionables);
+    return { set: new Set(hs.map((h) => h.handle.toLowerCase())), mine: hs.find((h) => h.id === me.id)?.handle.toLowerCase() };
+  }, [header.mentionables, me.id]);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [text, setText] = useState("");
   const [clearSignal, setClearSignal] = useState(0);
@@ -84,6 +116,7 @@ export function ConversationView({ me, header, initial, info, highlight }: {
         const d = await r.json();
         merge([...d.messages, ...(d.changed ?? [])]);
         setTyping(d.typing ?? []);
+        if (d.pins) setPins(d.pins);
         if (d.now) rsince.current = d.now;
       }
     } catch { /* offline: try again next tick */ }
@@ -102,9 +135,43 @@ export function ConversationView({ me, header, initial, info, highlight }: {
   useLayoutEffect(() => {
     const el = scroller.current;
     if (!el) return;
-    if (highlight) { document.getElementById(`m-${highlight}`)?.scrollIntoView({ block: "center" }); return; }
+    if (scrollTo.current) {
+      const target = document.getElementById(`m-${scrollTo.current}`);
+      if (target) { target.scrollIntoView({ block: "center" }); scrollTo.current = undefined; atBottom.current = false; }
+      return;
+    }
     if (atBottom.current) el.scrollTop = el.scrollHeight;
-  }, [items, highlight]);
+  }, [items]);
+
+  // Go to a message: scroll if it's loaded, otherwise load the messages around it first.
+  const jumpTo = useCallback(async (id: string) => {
+    setFocus(id);
+    const el = document.getElementById(`m-${id}`);
+    if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); atBottom.current = false; return; }
+    try {
+      const r = await fetch(`/api/chat/${header.id}?around=${id}`, { cache: "no-store" });
+      if (!r.ok) { toast.push("error", "That message isn't available anymore."); return; }
+      const win: ChatMessage[] = (await r.json()).messages;
+      scrollTo.current = id; atBottom.current = false;
+      setHasOlder(true);
+      // Newer messages fill back in automatically through the live updates.
+      setItems((prev) => [...win, ...prev.filter((m) => m.pending)]);
+    } catch { toast.push("error", "Couldn't load that message. Check your connection."); }
+  }, [header.id, toast]);
+
+  // Search inside this chat (waits until you stop typing).
+  useEffect(() => {
+    if (!searchOpen) return;
+    const q = query.trim();
+    if (q.length < 2) { setResults(null); return; }
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/chat/${header.id}/search?q=${encodeURIComponent(q)}`, { cache: "no-store" });
+        if (r.ok) setResults((await r.json()).results);
+      } catch { /* offline */ }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [query, searchOpen, header.id]);
 
   const loadOlder = async () => {
     if (!items.length) return;
@@ -150,7 +217,7 @@ export function ConversationView({ me, header, initial, info, highlight }: {
     const tempId = `temp-${Date.now()}`;
     outbox.current.set(tempId, fd);
     const temp: ChatMessage = {
-      id: tempId, authorId: me.id, authorName: "You", authorAvatar: null, body, system: false, createdAt: new Date().toISOString(), editedAt: null, deleted: false,
+      id: tempId, authorId: me.id, authorName: "You", authorAvatar: null, body, system: false, createdAt: new Date().toISOString(), editedAt: null, deleted: false, unsent: false, pinned: false,
       files: files.map((f, i) => ({ id: `${tempId}-${i}`, filename: f.name, mimeType: f.type, size: f.size, localUrl: URL.createObjectURL(f) })),
       reactions: [], replyTo: replyTo ? { id: replyTo.id, authorName: replyTo.authorName, body: replyTo.body.slice(0, 140), hasImage: replyTo.files.length > 0 } : null,
       pending: navigator.onLine ? "sending" : "failed",
@@ -225,8 +292,39 @@ export function ConversationView({ me, header, initial, info, highlight }: {
           <div className="flex items-center gap-1.5 truncate font-semibold">{header.title}{header.muted && <BellOff className="h-3.5 w-3.5 text-faint" aria-label="Muted" />}</div>
           <div className="truncate text-xs text-muted">{header.subtitle}</div>
         </button>
+        <button onClick={() => { setSearchOpen(true); setQuery(""); setResults(null); }} className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-fg" aria-label="Search this chat"><Search className="h-5 w-5" /></button>
         <button onClick={() => setInfoOpen(true)} className="rounded-lg p-2 text-muted hover:bg-surface-2 hover:text-fg" aria-label="Chat details"><Info className="h-5 w-5" /></button>
       </header>
+      {searchOpen && (
+        <div className="relative border-b border-line px-3 py-2">
+          <div className="flex items-center gap-2">
+            <Search className="h-4 w-4 shrink-0 text-muted" aria-hidden />
+            <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search this chat" aria-label="Search this chat"
+              onKeyDown={(e) => { if (e.key === "Escape") setSearchOpen(false); }}
+              className="min-w-0 flex-1 bg-transparent py-1.5 text-base outline-none placeholder:text-faint" />
+            <button onClick={() => setSearchOpen(false)} className="rounded-lg px-2 py-1 text-sm font-semibold text-brand-ink">Done</button>
+          </div>
+          {results && (
+            <div className="absolute inset-x-0 top-full z-30 max-h-[50vh] overflow-y-auto border-b border-line bg-surface shadow-pop" role="list" aria-label="Search results">
+              {results.length === 0 ? <p className="px-4 py-3 text-sm text-muted">No messages match “{query.trim()}”.</p> : results.map((r) => (
+                <button key={r.id} role="listitem" onClick={() => { setSearchOpen(false); void jumpTo(r.id); }} className="block w-full border-b border-line px-4 py-2.5 text-left last:border-0 hover:bg-surface-2">
+                  <span className="flex justify-between gap-2 text-xs text-muted"><span className="font-semibold text-fg">{r.authorName}</span><span>{new Date(r.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span></span>
+                  <span className="line-clamp-2 text-sm"><Highlight text={r.body} q={query.trim()} /></span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {pins.length > 0 && (
+        <div className="flex items-center gap-2 border-b border-line bg-surface-2/60 px-3 py-1.5">
+          <button onClick={() => void jumpTo(pins[0].id)} className="flex min-w-0 flex-1 items-center gap-2 text-left text-xs" aria-label="Go to pinned message">
+            <Pin className="h-3.5 w-3.5 shrink-0 text-brand" aria-hidden />
+            <span className="min-w-0 flex-1 truncate"><span className="font-semibold">{pins[0].authorName.split(" ")[0]}:</span> {pins[0].body || (pins[0].hasImage ? "📷 Photo" : "")}</span>
+          </button>
+          <button onClick={() => setPinsOpen(true)} className="shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold text-brand-ink hover:bg-surface">{pins.length > 1 ? `${pins.length} pinned` : "Pinned"}</button>
+        </div>
+      )}
       {header.kind === "workgroup" && header.tasks.length > 0 && (
         <div className="flex items-center gap-2 overflow-x-auto border-b border-line bg-surface-2/60 px-3 py-2 text-xs scrollbar-thin">
           <ListChecks className="h-4 w-4 shrink-0 text-muted" aria-hidden />
@@ -261,7 +359,7 @@ export function ConversationView({ me, header, initial, info, highlight }: {
                     <div className={cn("flex items-end gap-1", mine && "flex-row-reverse")}>
                       <div className={cn("flex flex-col gap-1", mine ? "items-end" : "items-start")}>
                       {stickers.length > 0 && (
-                        <div className={cn("flex flex-wrap gap-1", highlight === m.id && !showBubble && "rounded-xl ring-2 ring-accent")}>
+                        <div className={cn("flex flex-wrap gap-1", focus === m.id && !showBubble && "rounded-xl ring-2 ring-accent")}>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           {stickers.map((f) => <img key={f.id} src={f.localUrl ?? `/api/files/${f.id}?inline=1`} alt="Sticker" loading="lazy" className="h-28 w-auto max-w-[160px] object-contain" />)}
                         </div>
@@ -270,10 +368,10 @@ export function ConversationView({ me, header, initial, info, highlight }: {
                       <div className={cn("rounded-2xl px-3.5 py-2 text-[15px] leading-snug shadow-soft",
                         m.deleted ? "border border-dashed border-line bg-transparent italic text-faint" : mine ? "bg-brand text-brand-fg" : "bg-surface-2 text-fg",
                         m.pending === "sending" && "opacity-70", m.pending === "failed" && "opacity-60",
-                        highlight === m.id && "ring-2 ring-accent")}>
-                        {m.deleted ? "Message removed" : (<>
+                        focus === m.id && "ring-2 ring-accent")}>
+                        {m.deleted ? (m.unsent ? "Message unsent" : "Message removed") : (<>
                           {m.replyTo && (
-                            <button type="button" onClick={() => document.getElementById(`m-${m.replyTo!.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}
+                            <button type="button" onClick={() => void jumpTo(m.replyTo!.id)}
                               className={cn("mb-1.5 block w-full rounded-lg border-l-[3px] px-2 py-1 text-left text-xs", mine ? "border-white/70 bg-white/15" : "border-brand bg-surface")}>
                               <span className="block font-semibold">{m.replyTo.authorName}</span>
                               <span className="line-clamp-2 opacity-80">{m.replyTo.body || (m.replyTo.hasImage ? "📷 Photo" : "")}</span>
@@ -289,7 +387,7 @@ export function ConversationView({ me, header, initial, info, highlight }: {
                               ) : <a key={f.id} href={`/api/files/${f.id}`} className="underline">{f.filename}</a>)}
                             </div>
                           )}
-                          {m.body && <p className="whitespace-pre-wrap break-words"><Linkified text={m.body} /></p>}
+                          {m.body && <p className="whitespace-pre-wrap break-words"><Linkified text={m.body} handles={handleInfo.set} myHandle={handleInfo.mine} /></p>}
                         </>)}
                       </div>
                       )}
@@ -316,7 +414,7 @@ export function ConversationView({ me, header, initial, info, highlight }: {
                         <RotateCw className="h-3 w-3" />{online ? "Not sent · Tap to retry" : "Waiting for connection…"}
                       </button>
                     ) : (
-                      <span className="mx-1 mt-0.5 text-[10px] text-faint">{m.pending === "sending" ? "Sending…" : timeOf(m.createdAt)}{m.editedAt && !m.deleted ? " · edited" : ""}</span>
+                      <span className="mx-1 mt-0.5 inline-flex items-center gap-1 text-[10px] text-faint">{m.pinned && <Pin className="h-2.5 w-2.5" aria-label="Pinned" />}{m.pending === "sending" ? "Sending…" : timeOf(m.createdAt)}{m.editedAt && !m.deleted ? " · edited" : ""}</span>
                     )}
                   </div>
                 </SwipeRow>
@@ -363,7 +461,7 @@ export function ConversationView({ me, header, initial, info, highlight }: {
               setText(t);
               // Let others see "typing…" (at most one ping every 3 seconds).
               if (t.trim() && Date.now() - lastPing.current > 3000) { lastPing.current = Date.now(); void fetch(`/api/chat/${header.id}/typing`, { method: "POST" }).catch(() => {}); }
-            }} onEnter={send} onImages={onImages} />
+            }} onEnter={send} onImages={onImages} mentionables={header.mentionables} meId={me.id} />
             <button onClick={send} disabled={!text.trim() && !files.length} aria-label="Send"
               className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand text-brand-fg transition hover:bg-brand-hover disabled:opacity-40">
               {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -378,7 +476,23 @@ export function ConversationView({ me, header, initial, info, highlight }: {
 
       <ChatInfo {...info} open={infoOpen} onClose={() => setInfoOpen(false)} />
       {viewer && <PhotoViewer src={viewer.src} alt={viewer.alt} onClose={() => setViewer(null)} />}
-      <MessageMenu m={menuFor} me={me} canInteract={canInteract} onReact={(m, e) => { react(m, e); setMenuFor(null); }} onReply={(m) => { setReplyTo(m); setMenuFor(null); }} onClose={() => setMenuFor(null)} onChanged={() => { setMenuFor(null); poll(); router.refresh(); }} refetch={async () => {
+      <Dialog open={pinsOpen} onClose={() => setPinsOpen(false)} title="Pinned messages" size="sm">
+        <ul className="space-y-1">
+          {pins.map((p) => (
+            <li key={p.id} className="flex items-start gap-2 rounded-lg hover:bg-surface-2">
+              <button onClick={() => { setPinsOpen(false); void jumpTo(p.id); }} className="min-w-0 flex-1 px-2 py-2 text-left text-sm">
+                <span className="block text-xs font-semibold text-muted">{p.authorName}</span>
+                <span className="line-clamp-3">{p.body || (p.hasImage ? "📷 Photo" : "")}</span>
+              </button>
+              {header.canPin && (
+                <button onClick={() => void pinMessageAction(p.id, false).then((r) => { if (!r.ok) toast.push("error", r.error); setPins((cur) => cur.filter((x) => x.id !== p.id)); void poll(); })}
+                  className="m-1.5 rounded-lg p-1.5 text-muted hover:bg-surface hover:text-fg" aria-label={`Unpin message from ${p.authorName}`}><PinOff className="h-4 w-4" /></button>
+              )}
+            </li>
+          ))}
+        </ul>
+      </Dialog>
+      <MessageMenu m={menuFor} me={me} canInteract={canInteract} canPin={header.canPin} onReact={(m, e) => { react(m, e); setMenuFor(null); }} onReply={(m) => { setReplyTo(m); setMenuFor(null); }} onClose={() => setMenuFor(null)} onChanged={() => { setMenuFor(null); poll(); router.refresh(); }} refetch={async () => {
         const from = new Date(new Date(items[0]?.createdAt ?? 0).getTime() - 1).toISOString();
         const r = await fetch(`/api/chat/${header.id}?after=${encodeURIComponent(from)}`, { cache: "no-store" });
         if (r.ok) { const all: ChatMessage[] = (await r.json()).messages; setItems((prev) => prev.map((p) => all.find((x) => x.id === p.id) ?? p)); }
@@ -415,7 +529,14 @@ function SwipeRow({ enabled, onReply, onLongPress, className, children, id }: { 
   );
 }
 
-function MessageMenu({ m, me, canInteract, onReact, onReply, onClose, onChanged, refetch }: { m: ChatMessage | null; me: { id: string; role: string }; canInteract: boolean; onReact: (m: ChatMessage, e: string) => void; onReply: (m: ChatMessage) => void; onClose: () => void; onChanged: () => void; refetch: () => Promise<void> }) {
+function Highlight({ text, q }: { text: string; q: string }) {
+  const i = q ? text.toLowerCase().indexOf(q.toLowerCase()) : -1;
+  if (i < 0) return <>{text}</>;
+  const from = Math.max(0, i - 40);
+  return <>{from > 0 && "…"}{text.slice(from, i)}<mark className="rounded bg-accent/40 px-0.5 text-fg">{text.slice(i, i + q.length)}</mark>{text.slice(i + q.length)}</>;
+}
+
+function MessageMenu({ m, me, canInteract, canPin, onReact, onReply, onClose, onChanged, refetch }: { m: ChatMessage | null; me: { id: string; role: string }; canInteract: boolean; canPin: boolean; onReact: (m: ChatMessage, e: string) => void; onReply: (m: ChatMessage) => void; onClose: () => void; onChanged: () => void; refetch: () => Promise<void> }) {
   const [mode, setMode] = useState<"menu" | "edit" | "report">("menu");
   const [value, setValue] = useState("");
   const [busy, start] = useTransition();
@@ -423,6 +544,8 @@ function MessageMenu({ m, me, canInteract, onReact, onReply, onClose, onChanged,
   useEffect(() => { setMode("menu"); setValue(m?.body ?? ""); }, [m]);
   if (!m) return null;
   const mine = m.authorId === me.id;
+  const fresh = Date.now() - new Date(m.createdAt).getTime() < EDIT_WINDOW_MS; // own messages: edit/unsend for 15 minutes
+  const minutesLeft = Math.max(1, Math.ceil((EDIT_WINDOW_MS - (Date.now() - new Date(m.createdAt).getTime())) / 60_000));
   const run = (fn: () => Promise<{ ok: boolean; message?: string; error?: string }>) => start(async () => {
     const r = await fn();
     if (r.ok) { if (r.message) toast.push("success", r.message); await refetch(); onChanged(); }
@@ -443,8 +566,11 @@ function MessageMenu({ m, me, canInteract, onReact, onReply, onClose, onChanged,
           {canInteract && <Button variant="ghost" className="w-full justify-start" onClick={() => onReply(m)}><Reply className="h-4 w-4" />Reply</Button>}
           {m.body && <p className="mb-3 line-clamp-3 rounded-lg bg-surface-2 px-3 py-2 text-sm text-fg-2">{m.body}</p>}
           {m.body && <Button variant="ghost" className="w-full justify-start" onClick={() => { navigator.clipboard?.writeText(m.body); toast.push("success", "Copied."); onClose(); }}>Copy text</Button>}
-          {mine && m.body && <Button variant="ghost" className="w-full justify-start" onClick={() => setMode("edit")}>Edit</Button>}
-          {(mine || me.role === "admin") && <Button variant="ghost" className="w-full justify-start text-bad" disabled={busy} onClick={() => run(() => deleteMessageAction(m.id))}>{mine ? "Delete" : "Remove (admin)"}</Button>}
+          {canPin && <Button variant="ghost" className="w-full justify-start" disabled={busy} onClick={() => run(() => pinMessageAction(m.id, !m.pinned))}>{m.pinned ? <><PinOff className="h-4 w-4" />Unpin</> : <><Pin className="h-4 w-4" />Pin to top of chat</>}</Button>}
+          {mine && fresh && m.body && <Button variant="ghost" className="w-full justify-start" onClick={() => setMode("edit")}>Edit</Button>}
+          {mine && fresh && <Button variant="ghost" className="w-full justify-start text-bad" disabled={busy} onClick={() => run(() => deleteMessageAction(m.id))}>Unsend</Button>}
+          {mine && fresh && <p className="px-3 text-[11px] text-faint">You can edit or unsend for {minutesLeft} more minute{minutesLeft === 1 ? "" : "s"}.</p>}
+          {me.role === "admin" && (!mine || !fresh) && <Button variant="ghost" className="w-full justify-start text-bad" disabled={busy} onClick={() => run(() => deleteMessageAction(m.id))}>Remove (admin)</Button>}
           {!mine && <Button variant="ghost" className="w-full justify-start" onClick={() => setMode("report")}>Report to an administrator</Button>}
         </div>
       )}

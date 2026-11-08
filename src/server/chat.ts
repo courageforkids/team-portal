@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, gt, inArray, lt, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, ilike, inArray, isNotNull, isNull, lt, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { conversationMembers, conversations, files, messageReactions, messages, users } from "@/db/schema";
 import type { CurrentUser } from "./auth";
@@ -12,7 +12,7 @@ import type { CurrentUser } from "./auth";
  * - Everyone active is a member of the single "team" conversation.
  */
 
-export type ConvAccess = { read: boolean; post: boolean; member: boolean; manage: boolean; rename: boolean };
+export type ConvAccess = { read: boolean; post: boolean; member: boolean; manage: boolean; rename: boolean; pin: boolean };
 
 export async function conversationAccess(u: CurrentUser, conversationId: string): Promise<(ConvAccess & { conv: typeof conversations.$inferSelect }) | null> {
   const conv = (await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1))[0];
@@ -26,7 +26,9 @@ export async function conversationAccess(u: CurrentUser, conversationId: string)
   const manage = conv.kind === "workgroup" ? isAdmin : conv.kind === "group" ? isAdmin || conv.createdById === u.id : false;
   // Group chats and direct chats: any member can rename. Team chat and work groups: admins.
   const rename = conv.kind === "group" || conv.kind === "dm" ? member || isAdmin : isAdmin;
-  return { conv, read, post, member, manage, rename };
+  // Pinning: anyone in a direct or group chat; admins in the team chat and work groups.
+  const pin = !conv.archived && (conv.kind === "group" || conv.kind === "dm" ? member : isAdmin);
+  return { conv, read, post, member, manage, rename, pin };
 }
 
 /** Makes sure the all-team conversation exists and every active person is in it. */
@@ -106,7 +108,7 @@ export async function unreadMessageTotal(userId: string) {
 
 export type ChatMessage = {
   id: string; authorId: string | null; authorName: string; authorAvatar: string | null; body: string; system: boolean;
-  createdAt: string; editedAt: string | null; deleted: boolean; files: { id: string; filename: string; mimeType: string; size: number; localUrl?: string }[];
+  createdAt: string; editedAt: string | null; deleted: boolean; unsent: boolean; pinned: boolean; files: { id: string; filename: string; mimeType: string; size: number; localUrl?: string }[];
   reactions: { emoji: string; count: number; names: string[]; mine: boolean }[];
   replyTo: { id: string; authorName: string; body: string; hasImage: boolean } | null;
   /** Client-only: sending (optimistic) or failed. */
@@ -155,12 +157,50 @@ async function shapeMessages(list: MsgRow[], viewerId?: string): Promise<ChatMes
     return {
       id: m.id, authorId: m.authorId, authorName: name ?? "Former member", authorAvatar: avatar ?? null,
       body: m.deletedAt ? "" : m.body, system: m.system, createdAt: m.createdAt.toISOString(), editedAt: m.editedAt?.toISOString() ?? null,
-      deleted: !!m.deletedAt,
+      deleted: !!m.deletedAt, unsent: !!m.deletedAt && !!m.authorId && m.deletedById === m.authorId, pinned: !!m.pinnedAt && !m.deletedAt,
       files: m.deletedAt ? [] : fileRows.filter((f) => f.ownerId === m.id).map((f) => ({ id: f.id, filename: f.filename, mimeType: f.mimeType, size: f.size })),
       reactions: m.deletedAt ? [] : reactions,
       replyTo: rp ? { id: rp.id, authorName: rp.name ?? "Former member", body: rp.deletedAt ? "Message removed" : rp.body.slice(0, 140), hasImage: replyFiles.some((f) => f.ownerId === rp.id) } : null,
     };
   });
+}
+
+/** Own messages can be edited or unsent for this long after sending. */
+export const EDIT_WINDOW_MS = 15 * 60_000;
+
+export type PinnedMessage = { id: string; authorName: string; body: string; hasImage: boolean; pinnedAt: string };
+export async function loadPins(conversationId: string): Promise<PinnedMessage[]> {
+  const rows = await db.select({ id: messages.id, body: messages.body, pinnedAt: messages.pinnedAt, name: users.name }).from(messages)
+    .leftJoin(users, eq(users.id, messages.authorId))
+    .where(and(eq(messages.conversationId, conversationId), isNotNull(messages.pinnedAt), isNull(messages.deletedAt)))
+    .orderBy(desc(messages.pinnedAt)).limit(20);
+  const withFiles = rows.length ? await db.select({ ownerId: files.ownerId }).from(files).where(and(eq(files.ownerType, "message"), inArray(files.ownerId, rows.map((r) => r.id)))) : [];
+  return rows.map((r) => ({ id: r.id, authorName: r.name ?? "Former member", body: r.body.slice(0, 200), hasImage: withFiles.some((f) => f.ownerId === r.id), pinnedAt: r.pinnedAt!.toISOString() }));
+}
+
+/** Search one chat's messages (newest first). */
+export async function searchMessages(conversationId: string, q: string) {
+  const term = q.trim().slice(0, 100);
+  if (term.length < 2) return [];
+  const like = `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  const rows = await db.select({ id: messages.id, body: messages.body, createdAt: messages.createdAt, name: users.name }).from(messages)
+    .leftJoin(users, eq(users.id, messages.authorId))
+    .where(and(eq(messages.conversationId, conversationId), isNull(messages.deletedAt), eq(messages.system, false), ilike(messages.body, like)))
+    .orderBy(desc(messages.createdAt)).limit(30);
+  return rows.map((r) => ({ id: r.id, authorName: r.name ?? "Former member", body: r.body.slice(0, 300), createdAt: r.createdAt.toISOString() }));
+}
+
+/** A window of messages starting a little before one message (used to jump to an older message). */
+export async function loadAround(conversationId: string, messageId: string, viewerId?: string): Promise<ChatMessage[] | null> {
+  const target = (await db.select({ createdAt: messages.createdAt }).from(messages).where(and(eq(messages.id, messageId), eq(messages.conversationId, conversationId))).limit(1))[0];
+  if (!target) return null;
+  const [before, after] = await Promise.all([
+    loadMessages(conversationId, { before: new Date(target.createdAt.getTime() + 1), limit: 20, viewerId }),
+    loadMessages(conversationId, { after: target.createdAt, limit: 80, viewerId }),
+  ]);
+  // Database times are finer than JS dates, so the target can come back in both halves; keep each message once.
+  const seen = new Set<string>();
+  return [...before, ...after].filter((m) => !seen.has(m.id) && !!seen.add(m.id));
 }
 
 export async function conversationMembersList(conversationId: string) {

@@ -5,7 +5,8 @@ import { db } from "@/db";
 import { conversationMembers, conversations, messageReactions, messages, users } from "@/db/schema";
 import { actionAdmin, actionUser, AuthError } from "./auth";
 import { all, filesOf, safe, str, UserError } from "./safe-action";
-import { addSystemMessage, conversationAccess, dmKeyFor, ensureTeamConversation, markRead } from "./chat";
+import { addSystemMessage, conversationAccess, conversationMembersList, dmKeyFor, EDIT_WINDOW_MS, ensureTeamConversation, markRead } from "./chat";
+import { findMentionedIds } from "@/lib/mentions";
 import { prepareUploads, storePrepared } from "./storage";
 import { rateLimit } from "./rate-limit";
 import { sendPush } from "./push";
@@ -22,13 +23,13 @@ async function activeUsers(ids: string[]) {
 }
 
 /** Phone alert to members who haven't read it, aren't muted, and haven't been alerted for this chat in the last minute. */
-async function pushNewMessage(conversationId: string, senderId: string, senderName: string, title: string | null, kind: string, preview: string) {
+async function pushNewMessage(conversationId: string, senderId: string, senderName: string, title: string | null, kind: string, preview: string, skip: string[] = []) {
   const cutoff = new Date(Date.now() - 60_000);
   const targets = await db.select({ userId: conversationMembers.userId }).from(conversationMembers).where(and(
     eq(conversationMembers.conversationId, conversationId), eq(conversationMembers.muted, false),
     or(isNull(conversationMembers.lastPushAt), lt(conversationMembers.lastPushAt, cutoff)),
   ));
-  const ids = targets.map((t) => t.userId).filter((id) => id !== senderId);
+  const ids = targets.map((t) => t.userId).filter((id) => id !== senderId && !skip.includes(id));
   if (!ids.length) return;
   await db.update(conversationMembers).set({ lastPushAt: new Date() })
     .where(and(eq(conversationMembers.conversationId, conversationId), inArray(conversationMembers.userId, ids)));
@@ -62,7 +63,17 @@ export async function sendMessageAction(_: unknown, fd: FormData): Promise<Actio
     const now = new Date();
     await db.update(conversations).set({ lastMessageAt: now }).where(eq(conversations.id, conversationId));
     await markRead(conversationId, me.id);
-    await pushNewMessage(conversationId, me.id, me.name, access.conv.title, access.conv.kind, body);
+    // @mentions: an alert and an Inbox item for each person named, even if they muted this chat.
+    let mentioned: string[] = [];
+    if (body.includes("@") && access.conv.kind !== "dm") {
+      const people = (await conversationMembersList(conversationId)).filter((p) => p.status === "active");
+      mentioned = findMentionedIds(body, people).filter((id) => id !== me.id);
+      if (mentioned.length) {
+        const where = access.conv.kind === "team" ? "the team chat" : access.conv.title || "a group chat";
+        await notify(mentioned, { type: "chat_mention", title: `${me.name.split(" ")[0]} mentioned you in ${where}`, body: body.slice(0, 200), href: `/messages/${conversationId}?highlight=${msg.id}`, dedupeKey: `mention:${msg.id}` });
+      }
+    }
+    await pushNewMessage(conversationId, me.id, me.name, access.conv.title, access.conv.kind, body, mentioned);
     return { ok: true, data: { id: msg.id } };
   });
 }
@@ -80,9 +91,11 @@ export async function editMessageAction(messageId: string, body: string): Promis
     const me = await actionUser();
     const m = (await db.select().from(messages).where(eq(messages.id, uuid.parse(messageId))).limit(1))[0];
     if (!m || m.authorId !== me.id || m.deletedAt || m.system) throw new AuthError("You can only edit your own messages.");
+    if (Date.now() - m.createdAt.getTime() > EDIT_WINDOW_MS) throw new UserError("Messages can only be edited for 15 minutes after sending.");
     const text = String(body ?? "").trim().slice(0, MAX_BODY);
-    if (!text) throw new UserError("A message can't be empty. Delete it instead.");
-    await db.update(messages).set({ body: text, editedAt: new Date() }).where(eq(messages.id, m.id));
+    if (!text) throw new UserError("A message can't be empty. Unsend it instead.");
+    const now = new Date();
+    await db.update(messages).set({ body: text, editedAt: now, reactedAt: now }).where(eq(messages.id, m.id));
     return { ok: true };
   });
 }
@@ -93,10 +106,14 @@ export async function deleteMessageAction(messageId: string): Promise<ActionResu
     const m = (await db.select().from(messages).where(eq(messages.id, uuid.parse(messageId))).limit(1))[0];
     if (!m || m.deletedAt) throw new UserError("That message was already removed.");
     const own = m.authorId === me.id;
-    if (!own && me.role !== "admin") throw new AuthError("You can only delete your own messages.");
-    await db.update(messages).set({ deletedAt: new Date(), deletedById: me.id }).where(eq(messages.id, m.id));
+    if (!own && me.role !== "admin") throw new AuthError("You can only unsend your own messages.");
+    // Your own messages can be unsent for 15 minutes; administrators can remove any message at any time (youth safety).
+    const adminRemoval = me.role === "admin" && (!own || Date.now() - m.createdAt.getTime() > EDIT_WINDOW_MS);
+    if (own && !adminRemoval && Date.now() - m.createdAt.getTime() > EDIT_WINDOW_MS) throw new UserError("Messages can only be unsent for 15 minutes after sending.");
+    const now = new Date();
+    await db.update(messages).set({ deletedAt: now, deletedById: me.id, reactedAt: now, pinnedAt: null, pinnedById: null }).where(eq(messages.id, m.id));
     if (!own) await audit(me.id, "chat.message_removed", "message", m.id, { conversationId: m.conversationId, authorId: m.authorId });
-    return { ok: true, message: "Message removed." };
+    return { ok: true, message: own && !adminRemoval ? "Message unsent." : "Message removed." };
   });
 }
 
@@ -277,5 +294,20 @@ export async function reactAction(messageId: string, emoji: string): Promise<Act
     else await db.insert(messageReactions).values({ messageId: m.id, userId: me.id, emoji }).onConflictDoUpdate({ target: [messageReactions.messageId, messageReactions.userId], set: { emoji, createdAt: new Date() } });
     await db.update(messages).set({ reactedAt: new Date() }).where(eq(messages.id, m.id));
     return { ok: true };
+  });
+}
+
+export async function pinMessageAction(messageId: string, pinned: boolean): Promise<ActionResult> {
+  return safe(async () => {
+    const me = await actionUser();
+    const m = (await db.select().from(messages).where(eq(messages.id, uuid.parse(messageId))).limit(1))[0];
+    if (!m || m.deletedAt || m.system) throw new UserError("That message can't be pinned.");
+    const access = await conversationAccess(me, m.conversationId);
+    if (!access?.pin) throw new AuthError(access?.conv.kind === "team" || access?.conv.kind === "workgroup" ? "Only administrators can pin messages here." : "You're not in this chat.");
+    if (!!m.pinnedAt === pinned) return { ok: true };
+    const now = new Date();
+    await db.update(messages).set({ pinnedAt: pinned ? now : null, pinnedById: pinned ? me.id : null, reactedAt: now }).where(eq(messages.id, m.id));
+    if (pinned) await addSystemMessage(m.conversationId, `${me.name.split(" ")[0]} pinned a message`);
+    return { ok: true, message: pinned ? "Pinned." : "Unpinned." };
   });
 }

@@ -95,8 +95,10 @@ test("members can delete their own messages and report others'", async ({ browse
   await david.page.getByRole("button", { name: "Send" }).click();
   const bubble = david.page.locator(`[id^="m-"]`, { hasText: text });
   await bubble.getByRole("button", { name: "Message options" }).click();
-  await david.page.getByRole("button", { name: "Delete" }).click();
+  await expect(david.page.getByText(/edit or unsend for 1[45] more minutes/)).toBeVisible();
+  await david.page.getByRole("button", { name: "Unsend" }).click();
   await expect(david.page.locator(`[id^="m-"]`, { hasText: text })).toHaveCount(0);
+  await expect(david.page.getByText("Message unsent").first()).toBeVisible();
   const isaacMsg = david.page.locator(`[id^="m-"]`, { hasText: "Packing day sign-ups are open" });
   await isaacMsg.getByRole("button", { name: "Message options" }).click();
   await david.page.getByRole("button", { name: "Report to an administrator" }).click();
@@ -187,4 +189,63 @@ test("reactions and replies; messages show instantly", async ({ browser }) => {
   await expect(reply.getByText(text)).toBeVisible(); // quoted original
   const [m] = await sql`select reply_to_id from messages where body = 'Replying here' order by created_at desc limit 1`;
   expect(m.reply_to_id).toBeTruthy();
+});
+
+test("edit/unsend only for 15 minutes; @mentions; pins; search and jump to an old message", async ({ browser }) => {
+  const [team] = await sql`select id from conversations where kind = 'team'`;
+  const [david] = await sql`select id from users where email = 'david@demo.cfk.test'`;
+  const [isaacU] = await sql`select id, name from users where email = 'isaac@demo.cfk.test'`;
+  // An old message (30 days ago) buried under 60 newer ones, plus one of David's from 20 minutes ago.
+  const word = `Zebrafish${Date.now()}`;
+  await sql`insert into messages (conversation_id, author_id, body, created_at) values (${team.id}, ${david.id}, ${"Old note about " + word}, now() - interval '30 days')`;
+  await sql`insert into messages (conversation_id, author_id, body, created_at) select ${team.id}, ${david.id}, 'filler ' || g, now() - interval '25 minutes' + g * interval '1 second' from generate_series(1, 60) g`;
+  const stale = `Too late to change ${Date.now()}`;
+  await sql`insert into messages (conversation_id, author_id, body, created_at) values (${team.id}, ${david.id}, ${stale}, now() - interval '20 minutes')`;
+  await sql`update conversation_members set muted = true where conversation_id = ${team.id} and user_id = ${isaacU.id}`;
+  await sql`update messages set pinned_at = null, pinned_by_id = null where conversation_id = ${team.id}`;
+
+  const d = await as(browser, "david");
+  await d.page.goto(`/messages/${team.id}`);
+  // Past 15 minutes: no Edit or Unsend, and members can't pin in the team chat.
+  await d.page.locator(`[id^="m-"]`, { hasText: stale }).getByRole("button", { name: "Message options" }).click();
+  await expect(d.page.getByRole("button", { name: "Copy text" })).toBeVisible();
+  await expect(d.page.getByRole("button", { name: "Edit" })).toHaveCount(0);
+  await expect(d.page.getByRole("button", { name: "Unsend" })).toHaveCount(0);
+  await expect(d.page.getByRole("button", { name: /Pin to top/ })).toHaveCount(0);
+  await d.page.keyboard.press("Escape");
+
+  // @mention: typing "@Isa" offers Isaac; picking him inserts the handle. He's alerted even though he muted the chat.
+  const first = isaacU.name.split(" ")[0];
+  await d.page.locator("#composer").click();
+  await d.page.keyboard.type("Can you grab boxes @Isa");
+  await d.page.getByRole("option", { name: new RegExp(isaacU.name) }).click();
+  await expect(d.page.locator("#composer")).toHaveText(new RegExp(`@${first}\\s*$`));
+  await d.page.keyboard.type("please");
+  await d.page.getByRole("button", { name: "Send" }).click();
+  await expect.poll(async () => (await sql`select count(*)::int as n from notifications where user_id = ${isaacU.id} and type = 'chat_mention'`)[0].n, { timeout: 10_000 }).toBeGreaterThan(0);
+  const [note] = await sql`select title, href from notifications where user_id = ${isaacU.id} and type = 'chat_mention' order by created_at desc limit 1`;
+  expect(note.title).toMatch(/mentioned you in the team chat/);
+  await sql`update conversation_members set muted = false where conversation_id = ${team.id} and user_id = ${isaacU.id}`;
+
+  // Search finds the buried message and jumps to it.
+  await d.page.getByRole("button", { name: "Search this chat" }).click();
+  await d.page.getByRole("textbox", { name: "Search this chat" }).fill(word.slice(0, 12));
+  await d.page.getByRole("listitem").filter({ hasText: word }).click();
+  await expect(d.page.locator(`[id^="m-"]`, { hasText: word })).toBeInViewport({ timeout: 10_000 });
+
+  // The admin pins it; everyone sees the banner, and tapping it goes there.
+  const admin = await as(browser, "jacob");
+  await admin.page.goto(`/messages/${team.id}`);
+  const pinTarget = admin.page.locator(`[id^="m-"]`, { hasText: "Can you grab boxes" }).last();
+  await pinTarget.getByRole("button", { name: "Message options" }).click();
+  await admin.page.getByRole("button", { name: /Pin to top/ }).click();
+  await expect(d.page.getByRole("button", { name: "Go to pinned message" })).toContainText("Can you grab boxes", { timeout: 15_000 });
+  const isaac = await as(browser, "isaac");
+  await isaac.page.goto(note.href);
+  await expect(isaac.page.getByRole("button", { name: "Go to pinned message" })).toBeVisible();
+  await expect(isaac.page.locator(`[id^="m-"]`, { hasText: "Can you grab boxes" }).last().locator("span.font-semibold", { hasText: `@${first}` })).toBeVisible();
+  await admin.page.getByRole("button", { name: /^(Pinned|\d+ pinned)$/ }).click();
+  await admin.page.getByRole("button", { name: /Unpin message/ }).click();
+  await expect(d.page.getByRole("button", { name: "Go to pinned message" })).toHaveCount(0, { timeout: 15_000 });
+  await d.ctx.close(); await admin.ctx.close(); await isaac.ctx.close();
 });

@@ -492,8 +492,11 @@ export const messages = pgTable("messages", {
   id: uuid("id").primaryKey().defaultRandom(),
   /** Swipe-to-reply: the message this one answers. */
   replyToId: uuid("reply_to_id"),
-  /** Bumped whenever reactions change, so open chats pick up the change. */
+  /** Bumped whenever a message changes after sending (reactions, edits, unsend, pin), so open chats pick up the change. */
   reactedAt: timestamp("reacted_at", { withTimezone: true }),
+  /** Pinned to the top of the chat. */
+  pinnedAt: timestamp("pinned_at", { withTimezone: true }),
+  pinnedById: uuid("pinned_by_id"),
   conversationId: uuid("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
   authorId: uuid("author_id").references(() => users.id, { onDelete: "set null" }),
   body: text("body").notNull().default(""),
