@@ -18,6 +18,7 @@ For trusted automation (e.g. Claude) acting on behalf of an Executive Administra
 | POST | `/api/v1/tasks` | `{ title, assignees: ["Julia"], dueAt, instructions?, priority?: low\|medium\|high\|urgent, department?, project?, category?, submissionTypes?: ["file","text","link","checklist"], checklist?: ["step"], links?: [{label,url}], deliverables?, completionCriteria?, requiresReview?: true, reviewer?, separate?: true, workGroup? }` |
 | POST | `/api/v1/tasks` with `draft: true, batch?: "Week of Nov 9"` | Saves a private draft instead: nobody is assigned or notified. Review at /tasks/drafts. |
 | GET | `/api/v1/task-drafts` | Lists drafts. |
+| PATCH / DELETE | `/api/v1/task-drafts/:id` | Edit a draft: `{ title?, text?, when?: "2026-11-13T18:00", batch?, assignees?, checklist?: [..], options?: [..] }`, or delete it. |
 | POST | `/api/v1/task-drafts/publish` | `{ ids: [...] }` or `{ batch: "Week of Nov 9" }`. Creates the tasks and notifies assignees. |
 | GET | `/api/v1/tasks/:id` | task + assignees + submissions + reviews |
 | PATCH | `/api/v1/tasks/:id` | any of `title, instructions, dueAt, priority, department, project, category, deliverables, completionCriteria, assignees, requiresReview, reviewer`, and/or `{ status, reason }` (status: not_started, in_progress, approved, canceled, excused, blocked…) |

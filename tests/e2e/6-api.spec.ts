@@ -131,6 +131,13 @@ test("drafts can be edited before publishing", async ({ browser, request }) => {
   await request.post("/api/v1/tasks", { headers: H, data: { title: t, assignees: ["Owen"], dueAt: "2026-12-20T17:00", submissionTypes: ["checklist"], checklist: ["Step one"], draft: true } });
   await request.post("/api/v1/polls", { headers: H, data: { question: `Poll ${t}`, options: ["A", "B"], draft: true } });
 
+  // Edit by API: move the due date
+  const list = await (await request.get("/api/v1/task-drafts", { headers: H })).json();
+  const mine = list.drafts.find((x: { title: string }) => x.title === t);
+  const pr = await request.patch(`/api/v1/task-drafts/${mine.id}`, { headers: H, data: { when: "2026-11-13T18:00" } });
+  expect(pr.status(), await pr.text()).toBe(200);
+  expect((await pr.json()).draft.when).toBe("2026-11-13T18:00");
+
   await admin.page.goto("/drafts");
   await admin.page.getByRole("button", { name: `Edit draft ${t}` }).click();
   const dlg = admin.page.getByRole("dialog").filter({ hasText: "Edit draft" });
