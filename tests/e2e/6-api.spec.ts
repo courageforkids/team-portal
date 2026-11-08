@@ -156,6 +156,5 @@ test("drafts can be edited before publishing", async ({ browser, request }) => {
   admin.page.once("dialog", (x) => x.accept());
   await admin.page.getByRole("listitem").filter({ hasText: `Poll ${t}` }).getByRole("button", { name: "Publish" }).click();
   await toast(admin.page, /Published 1 draft/);
-  const [p] = await sql`select options from polls where question = ${"Poll " + t}`;
-  expect(p.options).toHaveLength(3);
+  await expect.poll(async () => (await sql`select options from polls where question = ${"Poll " + t}`)[0]?.options?.length).toBe(3);
 });
