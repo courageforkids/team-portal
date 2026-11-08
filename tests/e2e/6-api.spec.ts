@@ -117,6 +117,8 @@ test("drafts everywhere: announcement drafts from the API and the portal stay pr
     await admin.page.getByRole("listitem").filter({ hasText: t }).getByRole("button", { name: "Publish" }).click();
     await toast(admin.page, /Published 1 draft/);
     await expect.poll(async () => (await sql`select count(*)::int as n from announcements where title = ${t}`)[0].n).toBe(1);
+    // Whole-team announcements are also posted in the team chat
+    await expect.poll(async () => (await sql`select count(*)::int as n from messages m join conversations c on c.id = m.conversation_id where c.kind = 'team' and m.body like ${"%" + t + "%"}`)[0].n).toBe(1);
   }
 });
 

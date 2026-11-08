@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { announcements, conversations, messages, taskAssignees, taskSeries, tasks, users } from "@/db/schema";
 import { ensureTeamConversation } from "./chat";
 import { getSettings } from "./settings";
+import { appUrl } from "./email";
 import { adminIds, notify } from "./notify";
 import { createTasks } from "./tasks";
 import { audienceMatches } from "./policy";
@@ -122,7 +123,17 @@ export async function notifyAnnouncementAudience(announcementId: string) {
   if (!claimed.length) return 0;
   const members = await db.select({ id: users.id, role: users.role, departmentId: users.departmentId }).from(users).where(eq(users.status, "active"));
   const ids = members.filter((m) => audienceMatches(a.audience, m)).map((m) => m.id);
-  return notify(ids, { type: "announcement", title: a.pinned ? `📌 ${a.title}` : a.title, body: a.body.slice(0, 160), href: `/announcements/${a.id}`, dedupeKey: `ann:${a.id}`, excludeUserId: a.authorId ?? undefined });
+  const sent = await notify(ids, { type: "announcement", title: a.pinned ? `📌 ${a.title}` : a.title, body: a.body.slice(0, 160), href: `/announcements/${a.id}`, dedupeKey: `ann:${a.id}`, excludeUserId: a.authorId ?? undefined });
+  // Announcements for the whole team are also posted in the team chat, so people can talk about them there.
+  const forEveryone = !(a.audience?.roles?.length) && !(a.audience?.departmentIds?.length);
+  if (forEveryone) {
+    try {
+      const team = await ensureTeamConversation();
+      await db.insert(messages).values({ conversationId: team.id, authorId: a.authorId, system: !a.authorId, body: `📢 New announcement: ${a.title}\nRead it here: ${appUrl(`/announcements/${a.id}`)}` });
+      await db.update(conversations).set({ lastMessageAt: new Date() }).where(eq(conversations.id, team.id));
+    } catch (e) { console.error("couldn't post announcement to team chat", e); }
+  }
+  return sent;
 }
 
 export async function publishDueAnnouncements(now = new Date()) {
