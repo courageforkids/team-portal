@@ -106,3 +106,78 @@ export async function publishDrafts(actor: CurrentUser, ids: string[]) {
   }
   return { published, failed: null as null | { id: string; title: string; error: string } };
 }
+
+/* ───── Editing ───── */
+
+const TZ = "America/New_York";
+const TEXT_KEYS = ["instructions", "body", "description", "agenda"];
+const DEFAULT_TEXT: Record<string, string> = { task: "instructions", announcement: "body", poll: "description", event: "description", meeting: "agenda", resource: "description" };
+const WHEN_KEY: Record<string, string> = { task: "dueAt", event: "startsAt", meeting: "startsAt", announcement: "publishAt", poll: "closesAt" };
+
+export type DraftView = {
+  id: string; kind: string; batch: string; title: string; titleKey: string;
+  text: string; textKey: string; when: string; whenKey: string | null;
+  assignees: string[] | null; checklist: string | null; options: string | null;
+};
+
+type Entries = [string, string][];
+const entriesOf = (d: Draft) => (d.input as { entries: Entries }).entries;
+const getE = (e: Entries, k: string) => e.filter(([n]) => n === k).map(([, v]) => v);
+const setE = (e: Entries, k: string, vals: string[]): Entries => [...e.filter(([n]) => n !== k), ...vals.map((v) => [k, v] as [string, string])];
+
+/** The editable parts of a draft, in one shape for every kind and format. */
+export async function draftView(d: Draft): Promise<DraftView> {
+  const { toLocalInput } = await import("@/lib/dates");
+  const titleKey = d.kind === "poll" ? "question" : "title";
+  const whenKey = WHEN_KEY[d.kind] ?? null;
+  if (d.format === "form") {
+    const e = entriesOf(d);
+    const textKey = TEXT_KEYS.find((k) => getE(e, k).length) ?? DEFAULT_TEXT[d.kind] ?? "description";
+    return {
+      id: d.id, kind: d.kind, batch: d.batch, title: getE(e, titleKey)[0] ?? d.title, titleKey, text: getE(e, textKey)[0] ?? "", textKey,
+      when: whenKey ? getE(e, whenKey)[0] ?? "" : "", whenKey: whenKey && (getE(e, whenKey).length || d.kind !== "announcement") ? whenKey : null,
+      assignees: d.kind === "task" ? getE(e, "assignees") : null, checklist: d.kind === "task" ? getE(e, "checklist")[0] ?? "" : null,
+      options: d.kind === "poll" ? getE(e, "option").join("\n") : null,
+    };
+  }
+  const b = d.input as Record<string, unknown>;
+  const textKey = TEXT_KEYS.find((k) => typeof b[k] === "string" && b[k]) ?? DEFAULT_TEXT[d.kind] ?? "description";
+  const rawWhen = whenKey ? (b[whenKey] as string | null | undefined) ?? "" : "";
+  return {
+    id: d.id, kind: d.kind, batch: d.batch, title: String(b[titleKey] ?? d.title), titleKey, text: String(b[textKey] ?? ""), textKey,
+    when: d.format === "task-input" ? (rawWhen ? toLocalInput(rawWhen, TZ) : "") : rawWhen, whenKey,
+    assignees: d.format === "task-input" ? d.assigneeIds : null,
+    checklist: d.format === "task-input" ? ((b.checklist as { label: string }[] | undefined) ?? []).map((c) => c.label).join("\n") : null,
+    options: d.kind === "poll" ? ((b.options as string[] | undefined) ?? []).join("\n") : null,
+  };
+}
+
+export async function updateDraft(d: Draft, v: { title: string; text: string; when: string; batch: string; assignees: string[] | null; checklist: string | null; options: string | null }) {
+  const { parseLocalInput } = await import("@/lib/dates");
+  const cur = await draftView(d);
+  const lines = (s: string | null) => (s ?? "").split("\n").map((x) => x.trim()).filter(Boolean);
+  let input = d.input as Record<string, unknown>;
+  let assigneeIds = d.assigneeIds;
+  if (d.format === "form") {
+    let e = entriesOf(d);
+    e = setE(e, cur.titleKey, [v.title]);
+    e = setE(e, cur.textKey, [v.text]);
+    if (cur.whenKey && v.when) e = setE(e, cur.whenKey, [v.when]);
+    if (d.kind === "task" && v.assignees) e = setE(e, "assignees", v.assignees);
+    if (d.kind === "task" && v.checklist !== null) e = setE(e, "checklist", [v.checklist]);
+    if (d.kind === "poll" && v.options !== null) e = setE(e, "option", lines(v.options));
+    input = { entries: e };
+  } else {
+    input = { ...input, [cur.titleKey]: v.title, [cur.textKey]: v.text };
+    if (cur.whenKey) input[cur.whenKey] = v.when ? (d.format === "task-input" ? parseLocalInput(v.when, TZ)?.toISOString() ?? null : v.when) : (d.format === "task-input" ? null : input[cur.whenKey]);
+    if (d.format === "task-input") {
+      if (v.assignees) assigneeIds = v.assignees;
+      if (v.checklist !== null) {
+        const old = (input.checklist as { id: string; label: string }[] | undefined) ?? [];
+        input.checklist = lines(v.checklist).slice(0, 30).map((label) => old.find((c) => c.label === label) ?? { id: crypto.randomUUID().slice(0, 8), label: label.slice(0, 200) });
+      }
+    }
+    if (d.kind === "poll" && v.options !== null) input.options = lines(v.options);
+  }
+  await db.update(taskDrafts).set({ title: v.title.slice(0, 200), batch: batchOf(v.batch), input, assigneeIds }).where(eq(taskDrafts.id, d.id));
+}

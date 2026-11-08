@@ -119,3 +119,43 @@ test("drafts everywhere: announcement drafts from the API and the portal stay pr
     await expect.poll(async () => (await sql`select count(*)::int as n from announcements where title = ${t}`)[0].n).toBe(1);
   }
 });
+
+test("drafts can be edited before publishing", async ({ browser, request }) => {
+  const admin = await as(browser, "jacob");
+  await admin.page.goto("/settings/api-keys");
+  await admin.page.fill("#ak-name", "E2E drafts 3");
+  await admin.page.getByRole("button", { name: "Create key" }).click();
+  const key = await admin.page.getByTestId("copy-value").inputValue();
+  const H = { Authorization: `Bearer ${key}` };
+  const t = `Editable ${Date.now()}`;
+  await request.post("/api/v1/tasks", { headers: H, data: { title: t, assignees: ["Owen"], dueAt: "2026-12-20T17:00", submissionTypes: ["checklist"], checklist: ["Step one"], draft: true } });
+  await request.post("/api/v1/polls", { headers: H, data: { question: `Poll ${t}`, options: ["A", "B"], draft: true } });
+
+  await admin.page.goto("/drafts");
+  await admin.page.getByRole("button", { name: `Edit draft ${t}` }).click();
+  const dlg = admin.page.getByRole("dialog").filter({ hasText: "Edit draft" });
+  await dlg.getByLabel("Title").fill(`${t} (edited)`);
+  await dlg.getByLabel("Checklist").fill("Step one\nStep two");
+  await dlg.getByRole("checkbox", { name: "Isaac" }).check();
+  await dlg.getByRole("button", { name: "Save draft" }).click();
+  await toast(admin.page, /Draft updated/);
+  const [d] = await sql`select title, assignee_ids, input from task_drafts where title = ${t + " (edited)"}`;
+  expect(d.assignee_ids).toHaveLength(2);
+  expect(d.input.checklist.map((c: { label: string }) => c.label)).toEqual(["Step one", "Step two"]);
+
+  await admin.page.getByRole("button", { name: `Edit draft Poll ${t}` }).click();
+  const pd = admin.page.getByRole("dialog").filter({ hasText: "Edit draft" });
+  await pd.getByLabel("Options").fill("A\nB\nC");
+  await pd.getByRole("button", { name: "Save draft" }).click();
+  await toast(admin.page, /Draft updated/);
+
+  admin.page.once("dialog", (x) => x.accept());
+  await admin.page.getByRole("listitem").filter({ hasText: `${t} (edited)` }).getByRole("button", { name: "Publish" }).click();
+  await toast(admin.page, /Published 1 draft/);
+  await expect.poll(async () => (await sql`select count(*)::int as n from tasks where title = ${t + " (edited)"}`)[0].n).toBe(2);
+  admin.page.once("dialog", (x) => x.accept());
+  await admin.page.getByRole("listitem").filter({ hasText: `Poll ${t}` }).getByRole("button", { name: "Publish" }).click();
+  await toast(admin.page, /Published 1 draft/);
+  const [p] = await sql`select options from polls where question = ${"Poll " + t}`;
+  expect(p.options).toHaveLength(3);
+});

@@ -1,14 +1,14 @@
-import { inArray } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { FileClock } from "lucide-react";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { requireAdmin } from "@/server/auth";
-import { KIND_LABEL, listDrafts, type Draft } from "@/server/drafts";
+import { draftView, KIND_LABEL, listDrafts, type Draft } from "@/server/drafts";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Badge, type Tone } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
-import { DeleteDraftButton, PublishDraftsButton } from "@/components/tasks/draft-buttons";
+import { DeleteDraftButton, EditDraftButton, PublishDraftsButton } from "@/components/tasks/draft-buttons";
 import { fmtDateTime } from "@/lib/dates";
 
 export const metadata = { title: "Drafts" };
@@ -36,6 +36,10 @@ export default async function DraftsPage() {
   const ids = [...new Set(drafts.flatMap((d) => [...d.assigneeIds, ...(d.format === "form" ? (d.input as { entries: [string, string][] }).entries.filter(([k]) => k === "assignees").map(([, v]) => v) : [])]))].filter((x) => /^[0-9a-f-]{36}$/.test(x));
   const names = new Map((ids.length ? await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, ids)) : []).map((u) => [u.id, u.name]));
   const batches = [...new Set(drafts.map((d) => d.batch))];
+  const [views, people] = await Promise.all([
+    Promise.all(drafts.map((d) => draftView(d))).then((vs) => new Map(vs.map((v) => [v.id, v]))),
+    db.select({ id: users.id, name: users.name }).from(users).where(eq(users.status, "active")).orderBy(asc(users.name)),
+  ]);
   return (
     <>
       <PageHeader eyebrow="Executive" title="Drafts" description="Tasks, announcements, polls, events and more, saved privately. Nobody sees them or gets notified until you publish."
@@ -68,6 +72,7 @@ export default async function DraftsPage() {
                         </div>
                         <div className="flex items-center gap-1">
                           <PublishDraftsButton ids={[d.id]} label="Publish" variant="secondary" confirmText={`Publish “${title}”? Everyone involved will be notified.`} />
+                          <EditDraftButton v={views.get(d.id)!} people={people} />
                           <DeleteDraftButton id={d.id} title={title} />
                         </div>
                       </div>
