@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { ToastProvider } from "@/components/ui/toaster";
+import { ViewportFix } from "@/components/shell/viewport-fix";
 import "./globals.css";
 
 const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-jakarta", display: "swap" });
@@ -12,7 +13,7 @@ export const metadata: Metadata = {
   appleWebApp: { capable: true, title: "CFK Portal", statusBarStyle: "default" },
 };
 export const viewport: Viewport = {
-  width: "device-width", initialScale: 1, viewportFit: "cover",
+  width: "device-width", initialScale: 1, maximumScale: 1, userScalable: false, viewportFit: "cover", interactiveWidget: "resizes-content",
 };
 
 // Applies the saved theme before paint to avoid a flash, and colors the phone's status bar to match
@@ -23,7 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={jakarta.variable} suppressHydrationWarning>
       <head><script dangerouslySetInnerHTML={{ __html: themeScript }} /></head>
-      <body className="min-h-dvh"><ToastProvider>{children}</ToastProvider></body>
+      <body className="min-h-dvh"><ViewportFix /><ToastProvider>{children}</ToastProvider></body>
     </html>
   );
 }

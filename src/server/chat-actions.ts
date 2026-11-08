@@ -49,6 +49,7 @@ export async function sendMessageAction(_: unknown, fd: FormData): Promise<Actio
     if (!(await rateLimit(`chat:${me.id}`, 30, 60))) throw new UserError("You're sending messages too fast. Wait a moment.");
     const prepared = await prepareUploads(uploads);
     const [msg] = await db.insert(messages).values({ conversationId, authorId: me.id, body }).returning();
+    await db.update(conversationMembers).set({ typingAt: null }).where(and(eq(conversationMembers.conversationId, conversationId), eq(conversationMembers.userId, me.id)));
     if (prepared.length) {
       try { await storePrepared(prepared, { type: "message", id: msg.id }, me.id); }
       catch (e) { await db.delete(messages).where(eq(messages.id, msg.id)); throw e; }

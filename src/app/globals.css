@@ -162,3 +162,13 @@ body {
 /* Grid/flex children may shrink below their content width (prevents horizontal overflow on phones). */
 .grid > * { min-width: 0; }
 
+
+/* Phone app feel: no rubber-band sliding, no double-tap zoom, and 16px text boxes so iPhone doesn't zoom in when you tap one. */
+html, body { overscroll-behavior: none; }
+html { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
+@media (max-width: 767px) {
+  .input, input, textarea, select, [contenteditable="true"] { font-size: 16px !important; }
+  /* Keyboard open: chat fills exactly the visible area above the keyboard; the bottom menu steps aside. */
+  html.kb-open [data-kb-fit] { position: fixed; top: var(--vvtop, 0px); bottom: auto; height: var(--vvh, 100dvh); left: 0; right: 0; z-index: 60; }
+  html.kb-open nav[aria-label="Primary"] { display: none; }
+}

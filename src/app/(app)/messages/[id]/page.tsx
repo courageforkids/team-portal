@@ -39,7 +39,7 @@ export default async function ConversationPage({ params, searchParams }: { param
     <div className="grid gap-4 md:h-[calc(100dvh-8.5rem)] md:grid-cols-[320px_1fr]">
       <div className="hidden min-h-0 md:block"><ChatList initial={conversations} everyone={everyone} me={{ id: me.id, role: me.role }} oversight={oversight} /></div>
       {/* On phones the conversation fills the screen between the top bar and the bottom tabs. */}
-      <div className="fixed inset-x-0 top-14 bottom-[calc(58px+env(safe-area-inset-bottom))] z-10 min-h-0 bg-surface md:static md:z-auto md:bg-transparent">
+      <div data-kb-fit className="fixed inset-x-0 top-14 bottom-[calc(58px+env(safe-area-inset-bottom))] z-10 min-h-0 bg-surface md:static md:z-auto md:bg-transparent">
         <ConversationView key={id} me={{ id: me.id, role: me.role }} highlight={sp.highlight}
           header={{ id, kind: c.kind, title, subtitle, description: c.description, people, member: access.member, canPost: access.post, archived: c.archived, muted: mem?.muted ?? false, tasks: groupTasks }}
           initial={initial}

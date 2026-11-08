@@ -482,6 +482,8 @@ export const conversationMembers = pgTable("conversation_members", {
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   lastReadAt: timestamp("last_read_at", { withTimezone: true }),
   lastPushAt: timestamp("last_push_at", { withTimezone: true }),
+  /** Last "is typing" ping; shown to others for a few seconds. */
+  typingAt: timestamp("typing_at", { withTimezone: true }),
   muted: boolean("muted").notNull().default(false),
   joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.conversationId, t.userId] }), index("conversation_members_user_idx").on(t.userId)]);

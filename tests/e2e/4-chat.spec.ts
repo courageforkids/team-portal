@@ -106,3 +106,27 @@ test("members can delete their own messages and report others'", async ({ browse
   expect(n.n).toBeGreaterThan(0);
   await david.ctx.close();
 });
+
+test("stickers send as bubble-free images, and others see who's typing", async ({ browser }) => {
+  const julia = await as(browser, "julia");
+  const isaac = await as(browser, "isaac");
+  for (const p of [julia.page, isaac.page]) { await p.goto("/messages"); await p.getByRole("link", { name: /Everyone/ }).first().click(); await p.waitForURL(/\/messages\/[0-9a-f-]{36}/); }
+
+  // Typing indicator
+  await julia.page.locator("#composer").pressSequentially("hello there", { delay: 30 });
+  await expect(isaac.page.getByText("Julia is typing…")).toBeVisible({ timeout: 15_000 });
+
+  // A pasted transparent image (what an Apple sticker is) sends right away as a sticker
+  await julia.page.locator("#composer").evaluate(async (el) => {
+    const c = document.createElement("canvas"); c.width = 120; c.height = 120;
+    const ctx = c.getContext("2d")!; ctx.fillStyle = "#FED438"; ctx.beginPath(); ctx.arc(60, 60, 40, 0, Math.PI * 2); ctx.fill();
+    const blob: Blob = await new Promise((r) => c.toBlob((b) => r(b!), "image/png"));
+    const dt = new DataTransfer(); dt.items.add(new File([blob], "s.png", { type: "image/png" }));
+    el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+  });
+  await expect(julia.page.getByRole("img", { name: "Sticker" }).last()).toBeVisible({ timeout: 15_000 });
+  await expect(isaac.page.getByRole("img", { name: "Sticker" }).last()).toBeVisible({ timeout: 15_000 });
+  // The typed text is still there, and sends normally
+  await julia.page.locator("#composer").press("Enter");
+  await expect(isaac.page.getByText("hello there").last()).toBeVisible({ timeout: 15_000 });
+});

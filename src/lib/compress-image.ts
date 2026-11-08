@@ -36,3 +36,32 @@ export function setInputFiles(input: HTMLInputElement | null, files: File[]) {
   files.forEach((f) => dt.items.add(f));
   input.files = dt.files;
 }
+
+/**
+ * Stickers (Apple stickers, Memoji, Live Stickers) arrive as images with a transparent background.
+ * Returns a small transparent PNG named "sticker-…" if the image has transparency, or null if it's an ordinary photo.
+ */
+export async function asSticker(file: File | Blob, maxDim = 360): Promise<File | null> {
+  try {
+    const url = URL.createObjectURL(file);
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => { const i = new Image(); i.onload = () => resolve(i); i.onerror = reject; i.src = url; });
+    URL.revokeObjectURL(url);
+    const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.max(1, Math.round(img.naturalWidth * scale)), h = Math.max(1, Math.round(img.naturalHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0, w, h);
+    const data = ctx.getImageData(0, 0, w, h).data;
+    let transparent = 0;
+    for (let i = 3; i < data.length; i += 4 * 7) if (data[i] < 250) transparent++;
+    if (transparent < (data.length / (4 * 7)) * 0.02) return null; // under ~2% see-through: treat as a photo
+    const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/png"));
+    return blob ? new File([blob], `sticker-${Date.now()}.png`, { type: "image/png", lastModified: Date.now() }) : null;
+  } catch {
+    return null;
+  }
+}
+
+export const isStickerName = (name: string) => /^sticker-\d+\.png$/.test(name);

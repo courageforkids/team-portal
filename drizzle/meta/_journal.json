@@ -99,6 +99,13 @@
       "when": 1794165095800,
       "tag": "0013_drafts_everywhere",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794172186571,
+      "tag": "0014_chat_typing",
+      "breakpoints": true
     }
   ]
 }

@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/cn";
-import { compressImage } from "@/lib/compress-image";
+import { asSticker, compressImage, isStickerName } from "@/lib/compress-image";
+import { Composer } from "./composer";
 import { deleteMessageAction, editMessageAction, reportMessageAction, sendMessageAction, markReadAction } from "@/server/chat-actions";
 import type { ChatMessage } from "@/server/chat";
 import { ChatInfo, type ChatInfoProps } from "./chat-info";
@@ -44,6 +45,9 @@ export function ConversationView({ me, header, initial, info, highlight }: {
   const [hasOlder, setHasOlder] = useState(initial.length >= 50);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [text, setText] = useState("");
+  const [clearSignal, setClearSignal] = useState(0);
+  const [typing, setTyping] = useState<string[]>([]);
+  const lastPing = useRef(0);
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
@@ -68,7 +72,7 @@ export function ConversationView({ me, header, initial, info, highlight }: {
     try {
       const url = `/api/chat/${header.id}${lastAt ? `?after=${encodeURIComponent(lastAt)}` : ""}`;
       const r = await fetch(url, { cache: "no-store" });
-      if (r.ok) merge((await r.json()).messages);
+      if (r.ok) { const d = await r.json(); merge(d.messages); setTyping(d.typing ?? []); }
     } catch { /* offline: try again next tick */ }
   }, [header.id, lastAt, merge]);
 
@@ -113,9 +117,26 @@ export function ConversationView({ me, header, initial, info, highlight }: {
     files.forEach((f) => fd.append("files", f));
     const r = await sendMessageAction(null, fd);
     setSending(false);
-    if (r.ok) { setText(""); setFiles([]); atBottom.current = true; await poll(); }
+    if (r.ok) { setText(""); setClearSignal((n) => n + 1); setFiles([]); atBottom.current = true; await poll(); }
     else toast.push("error", r.error);
   };
+
+  // Stickers send right away, like iMessage; ordinary pasted photos are added as attachments.
+  const sendSticker = async (sticker: File) => {
+    const fd = new FormData();
+    fd.append("conversationId", header.id);
+    fd.append("body", "");
+    fd.append("files", sticker);
+    const r = await sendMessageAction(null, fd);
+    if (r.ok) { atBottom.current = true; await poll(); } else toast.push("error", r.error);
+  };
+  const onImages = useCallback(async (list: File[]) => {
+    for (const f of list.slice(0, 4)) {
+      const sticker = await asSticker(f);
+      if (sticker) await sendSticker(sticker);
+      else { const small = await compressImage(f); setFiles((cur) => [...cur, small].slice(0, 4)); }
+    }
+  }, [header.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pickFiles = async (list: FileList | null) => {
     const arr = Array.from(list ?? []).slice(0, 4);
@@ -172,12 +193,19 @@ export function ConversationView({ me, header, initial, info, highlight }: {
             {g.rows.map(({ m, first }) => {
               if (m.system) return <p key={m.id} id={`m-${m.id}`} className="my-2 text-center text-xs text-muted">{m.body} · {timeOf(m.createdAt)}</p>;
               const mine = m.authorId === me.id;
+              const stickerOnly = !m.deleted && !m.body && m.files.length > 0 && m.files.every((f) => isStickerName(f.filename));
               return (
                 <div key={m.id} id={`m-${m.id}`} className={cn("group flex gap-2", mine ? "justify-end" : "justify-start", first ? "mt-3" : "mt-0.5")}>
                   {!mine && isGroupish && <div className="w-7 shrink-0">{first && <Avatar name={m.authorName} fileId={m.authorAvatar} size={28} />}</div>}
                   <div className={cn("flex max-w-[78%] flex-col", mine ? "items-end" : "items-start")}>
                     {first && !mine && isGroupish && <span className="mb-0.5 ml-1 text-[11px] font-semibold text-muted">{m.authorName}</span>}
                     <div className={cn("flex items-end gap-1", mine && "flex-row-reverse")}>
+                      {stickerOnly ? (
+                        <div className={cn("flex flex-wrap gap-1", highlight === m.id && "rounded-xl ring-2 ring-accent")}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          {m.files.map((f) => <img key={f.id} src={`/api/files/${f.id}?inline=1`} alt="Sticker" loading="lazy" className="h-28 w-auto max-w-[160px] object-contain" />)}
+                        </div>
+                      ) : (
                       <div className={cn("rounded-2xl px-3.5 py-2 text-[15px] leading-snug shadow-soft",
                         m.deleted ? "border border-dashed border-line bg-transparent italic text-faint" : mine ? "bg-brand text-brand-fg" : "bg-surface-2 text-fg",
                         highlight === m.id && "ring-2 ring-accent")}>
@@ -195,6 +223,7 @@ export function ConversationView({ me, header, initial, info, highlight }: {
                           {m.body && <p className="whitespace-pre-wrap break-words"><Linkified text={m.body} /></p>}
                         </>)}
                       </div>
+                      )}
                       {!m.deleted && (
                         <button onClick={() => setMenuFor(m)} aria-label="Message options"
                           className="rounded-full p-1 text-faint opacity-60 transition hover:bg-surface-2 hover:text-fg md:opacity-0 md:group-hover:opacity-100 focus:opacity-100">
@@ -211,6 +240,14 @@ export function ConversationView({ me, header, initial, info, highlight }: {
         ))}
       </div>
 
+      {typing.length > 0 && (
+        <div className="flex items-center gap-2 px-4 pb-1 pt-1 text-xs text-muted" aria-live="polite">
+          <span className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2.5 py-1.5" aria-hidden>
+            {[0, 1, 2].map((i) => <span key={i} className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted" style={{ animationDelay: `${i * 0.15}s` }} />)}
+          </span>
+          <span>{typing.length === 1 ? `${typing[0]} is typing…` : typing.length === 2 ? `${typing[0]} and ${typing[1]} are typing…` : "Several people are typing…"}</span>
+        </div>
+      )}
       {/* Composer */}
       {header.canPost ? (
         <div className="border-t border-line p-2.5 sm:p-3">
@@ -228,10 +265,11 @@ export function ConversationView({ me, header, initial, info, highlight }: {
           <div className="flex items-end gap-2">
             <button onClick={() => fileInput.current?.click()} className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-muted hover:bg-surface-2 hover:text-fg" aria-label="Add a photo"><ImagePlus className="h-5 w-5" /></button>
             <input ref={fileInput} type="file" accept="image/*" multiple className="sr-only" onChange={(e) => pickFiles(e.target.files)} />
-            <label htmlFor="composer" className="sr-only">Message</label>
-            <textarea id="composer" rows={1} value={text} onChange={(e) => setText(e.target.value)} placeholder="Message"
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !("ontouchstart" in window)) { e.preventDefault(); send(); } }}
-              className="input max-h-36 min-h-10 flex-1 resize-none rounded-[20px] py-2.5" style={{ fieldSizing: "content" } as React.CSSProperties} />
+            <Composer clearSignal={clearSignal} onText={(t) => {
+              setText(t);
+              // Let others see "typing…" (at most one ping every 3 seconds).
+              if (t.trim() && Date.now() - lastPing.current > 3000) { lastPing.current = Date.now(); void fetch(`/api/chat/${header.id}/typing`, { method: "POST" }).catch(() => {}); }
+            }} onEnter={send} onImages={onImages} />
             <button onClick={send} disabled={sending || (!text.trim() && !files.length)} aria-label="Send"
               className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand text-brand-fg transition hover:bg-brand-hover disabled:opacity-40">
               {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
