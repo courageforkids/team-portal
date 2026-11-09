@@ -37,9 +37,9 @@ export default async function AcademyAdminPage({ searchParams }: { searchParams:
     <>
       <AcademyTabs myCape={myCape && isCape(myCape) ? myCape : null} admin />
       <h1 className="mb-1 text-2xl font-extrabold">Academy admin</h1>
-      <p className="mb-6 text-muted">{a.audience === "preview" ? "🔒 Preview mode: only admins and the people you pick can see the Academy." : a.audience === "everyone" ? "✅ Open to everyone." : "⛔ Turned off."}</p>
+      <p className="mb-6 text-muted">Courage Academy is open to the whole team.</p>
       <div className="space-y-6">
-        <Card><CardHeader title="Who sees it" /><div className="px-5 pb-5"><AcademySettingsForm audience={a.audience} capeCount={a.capeCount} borders={a.borders} previewIds={a.previewIds} people={people} /></div></Card>
+        <Card><CardHeader title="Settings" /><div className="px-5 pb-5"><AcademySettingsForm capeCount={a.capeCount} borders={a.borders} /></div></Card>
 
         <Card>
           <CardHeader title={`🎯 Mission claims${claims.length ? ` (${claims.length})` : ""}`} description="Approve real-world wins. You can change the points before approving." />

@@ -24,7 +24,7 @@ async function main() {
   await db.insert(s.settings).values({ id: 1, data: {
     orgName: "Courage for Kids", tagline: "Their fight. Our mission.", reminderHours: [48, 24], overdueReminders: true,
     emailEnabled: false, emailFrom: "", quietHoursStart: 21, quietHoursEnd: 7, timezone: "America/New_York",
-    academy: { audience: "everyone", capeCount: 2 },
+    academy: { capeCount: 2 },
   } });
 
   const pw = await hashPassword(DEMO_PASSWORD);

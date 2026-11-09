@@ -1,38 +1,23 @@
 import { test, expect, type Page } from "@playwright/test";
 import { as, sql, toast } from "./helpers";
 
-const setAcademy = (audience: string) => sql`update settings set data = jsonb_set(data, '{academy,audience}', to_jsonb(${audience}::text)) where id = 1`;
 const acceptDialogs = (p: Page) => p.on("dialog", (d) => void d.accept());
 
-test("preview mode hides the Academy; the Christmas look starts with admins only", async ({ browser }) => {
-  await setAcademy("preview");
+test("the Academy and the Christmas look are on for everyone", async ({ browser }) => {
   const isaac = await as(browser, "isaac");
-  const jacob = await as(browser, "jacob");
-  await isaac.page.goto("/academy");
-  await expect(isaac.page.getByText("We couldn't find that page")).toBeVisible();
   await isaac.page.goto("/");
-  await expect(isaac.page.getByRole("link", { name: "Courage Academy" })).toHaveCount(0);
-  await jacob.page.goto("/");
-  await expect(jacob.page.getByRole("link", { name: "Courage Academy" }).first()).toBeAttached();
-  await setAcademy("everyone");
-
+  await expect(isaac.page.getByRole("link", { name: "Courage Academy" }).first()).toBeAttached();
+  await isaac.page.goto("/academy");
+  await expect(isaac.page.getByText("The Cape Cup")).toBeVisible();
   const md = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }).slice(5);
   if (md >= "11-01" || md <= "01-01") {
-    await sql`update settings set data = data - 'holiday' where id = 1`;
-    await jacob.page.goto("/");
-    await expect(jacob.page.locator("[data-holiday]")).toHaveCount(1);
-    await expect(jacob.page.getByText(/until Christmas|Christmas Day|Happy holidays/)).toBeVisible();
-    await isaac.page.goto("/");
-    await expect(isaac.page.locator("[data-holiday]")).toHaveCount(0);
-    await jacob.page.getByRole("combobox", { name: "Who sees the Christmas look" }).selectOption("everyone");
-    await toast(jacob.page, /on for everyone/);
     await isaac.page.goto("/");
     await expect(isaac.page.locator("[data-holiday]")).toHaveCount(1);
+    await expect(isaac.page.getByText(/until Christmas|Christmas Day|Happy holidays/)).toBeVisible();
     await isaac.page.getByRole("button", { name: "Turn off snow & lights" }).click();
     await expect(isaac.page.locator(".cfk-lights")).toBeHidden();
-    await sql`update settings set data = data - 'holiday' where id = 1`;
   }
-  await isaac.ctx.close(); await jacob.ctx.close();
+  await isaac.ctx.close();
 });
 
 test("the Sorting gives a Cape, joins the Cape chat, and the hero becomes the profile picture", async ({ browser }) => {

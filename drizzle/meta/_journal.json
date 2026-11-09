@@ -127,6 +127,13 @@
       "when": 1794184860516,
       "tag": "0017_courage_academy_v2",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1794188168104,
+      "tag": "0018_start_winter_season",
+      "breakpoints": true
     }
   ]
 }

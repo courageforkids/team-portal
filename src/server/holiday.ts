@@ -1,5 +1,4 @@
 import "server-only";
-import { getSettings } from "./settings";
 import type { CurrentUser } from "./auth";
 
 /** The Christmas look runs from Nov 1 through Jan 1 (Eastern time), then switches itself off. */
@@ -8,14 +7,10 @@ export function inHolidayWindow(now = new Date()) {
   return md >= "11-01" || md <= "01-01";
 }
 
-export async function holidaySettings() {
-  return { audience: (await getSettings()).holiday?.audience ?? "preview" };
-}
-
+/** The Christmas look is on for everyone during the holiday window. */
 export async function holidayOn(u: Pick<CurrentUser, "role">) {
-  if (!inHolidayWindow()) return false;
-  const { audience } = await holidaySettings();
-  return audience === "everyone" || (audience === "preview" && u.role === "admin");
+  void u;
+  return inHolidayWindow();
 }
 
 /** Days until Christmas (0 on the day), Eastern time. */

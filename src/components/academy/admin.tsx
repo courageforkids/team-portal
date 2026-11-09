@@ -20,30 +20,9 @@ function useRun() {
   return { pending, run };
 }
 
-export function AcademySettingsForm({ audience, capeCount, borders, previewIds, people }: {
-  audience: "off" | "preview" | "everyone"; capeCount: 2 | 4; borders: string; previewIds: string[]; people: { id: string; name: string; role: string }[];
-}) {
-  const [aud, setAud] = useState(audience);
+export function AcademySettingsForm({ capeCount, borders }: { capeCount: 2 | 4; borders: string }) {
   return (
     <ActionForm action={saveAcademySettingsAction} className="space-y-4">
-      <Field label="Who can see Courage Academy" htmlFor="ac-aud" hint="Preview = only admins and the people you tick below. Nobody else sees anything (no menu item, no alerts).">
-        <Select id="ac-aud" name="audience" value={aud} onChange={(e) => setAud(e.target.value as typeof aud)}>
-          <option value="preview">Preview (just me and people I pick)</option>
-          <option value="everyone">Everyone on the team</option>
-          <option value="off">Off (hide it from everyone)</option>
-        </Select>
-      </Field>
-      {aud === "preview" && (
-        <fieldset>
-          <legend className="label">Also show the preview to</legend>
-          <div className="grid gap-1.5 sm:grid-cols-2">
-            {people.filter((p) => p.role !== "admin").map((p) => (
-              <label key={p.id} className="flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm"><input type="checkbox" name="previewIds" value={p.id} defaultChecked={previewIds.includes(p.id)} />{p.name}</label>
-            ))}
-          </div>
-        </fieldset>
-      )}
-      {aud !== "preview" && previewIds.map((id) => <input key={id} type="hidden" name="previewIds" value={id} />)}
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Number of Capes" htmlFor="ac-capes" hint="2 works best while the team is small."><Select id="ac-capes" name="capeCount" defaultValue={String(capeCount)}><option value="2">2 (Navy, Gold)</option><option value="4">4 (Navy, Gold, Ember, Evergreen)</option></Select></Field>
         <Field label="Cape borders on pictures" htmlFor="ac-borders"><Select id="ac-borders" name="borders" defaultValue={borders === "off" ? "off" : "academy"}><option value="academy">On (in the Academy)</option><option value="off">Off</option></Select></Field>

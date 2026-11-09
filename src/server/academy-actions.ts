@@ -334,16 +334,13 @@ export async function deleteMottoAction(mottoId: string): Promise<ActionResult> 
 export async function saveAcademySettingsAction(_: unknown, fd: FormData): Promise<ActionResult> {
   return safe(async () => {
     const me = await actionAdmin();
-    const audience = z.enum(["off", "preview", "everyone"]).parse(str(fd, "audience") || "preview");
     const borders = z.enum(["off", "academy", "everywhere"]).parse(str(fd, "borders") || "academy");
     const capeCount = str(fd, "capeCount") === "4" ? 4 : 2;
-    const previewIds = all(fd, "previewIds").filter((x) => uuid.safeParse(x).success).slice(0, 50);
     const academy = (await getSettings()).academy ?? {};
-    const wasEveryone = academy.audience === "everyone";
-    await saveSettings({ academy: { ...academy, audience, borders, capeCount, previewIds } });
-    await audit(me.id, "academy.settings", "settings", "1", { audience, capeCount, borders, preview: previewIds.length });
+    await saveSettings({ academy: { ...academy, borders, capeCount } });
+    await audit(me.id, "academy.settings", "settings", "1", { capeCount, borders });
     revalidatePath("/", "layout");
-    return { ok: true, message: audience === "everyone" && !wasEveryone ? "Courage Academy is open for everyone! 🎉" : "Academy settings saved." };
+    return { ok: true, message: "Academy settings saved." };
   });
 }
 

@@ -21,11 +21,10 @@ export async function academySettings() {
 }
 export type AcademyConfig = Awaited<ReturnType<typeof academySettings>>;
 
-/** Who sees Courage Academy: everyone, nobody, or (while previewing) admins and anyone added to the preview. */
+/** Courage Academy is open to the whole team. */
 export function canSeeAcademy(u: Pick<CurrentUser, "id" | "role">, a: AcademyConfig) {
-  if (a.audience === "everyone") return true;
-  if (a.audience === "off") return false;
-  return u.role === "admin" || a.previewIds.includes(u.id);
+  void u; void a;
+  return true;
 }
 export async function requireAcademy(u: Pick<CurrentUser, "id" | "role">) {
   const a = await academySettings();

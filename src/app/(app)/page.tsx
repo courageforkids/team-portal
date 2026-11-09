@@ -10,8 +10,8 @@ import { db } from "@/db";
 import { announcementReads, announcements, events, notifications, pollVotes, polls, shoutoutRecipients, shoutouts, tasks, users } from "@/db/schema";
 import { badgeOf } from "@/lib/community";
 import { requireUser } from "@/server/auth";
-import { daysToChristmas, holidayOn, holidaySettings } from "@/server/holiday";
-import { HolidayAudience, HolidayFxToggle } from "@/components/shell/holiday";
+import { daysToChristmas, holidayOn } from "@/server/holiday";
+import { HolidayFxToggle } from "@/components/shell/holiday";
 import { birthdaysToday, upcomingCountdowns } from "@/server/home-extras";
 import { loadTasks } from "@/server/queries";
 import { allowedVisibilities, audienceMatches } from "@/server/policy";
@@ -50,7 +50,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const hour = Number(formatInTimeZone(now, tz, "H"));
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   const firstName = me.name.split(" ")[0];
-  const [holiday, holidayCfg] = await Promise.all([holidayOn(me), holidaySettings()]);
+  const holiday = await holidayOn(me);
   const xmas = daysToChristmas(now);
   const md = formatInTimeZone(now, tz, "MM-dd");
   const holidayHello = md >= "12-26" || md === "01-01" ? `Happy New Year, ${firstName}! ✨` : md >= "12-01" ? `Merry Christmas, ${firstName}! 🎄` : `${greeting}, ${firstName}! ❄️`;
@@ -129,7 +129,6 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         {holiday && (
           <div className="relative z-[1] mt-4 flex flex-wrap items-center gap-2">
             <HolidayFxToggle />
-            {me.role === "admin" && <HolidayAudience audience={holidayCfg.audience} />}
           </div>
         )}
       </section>
