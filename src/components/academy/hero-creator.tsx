@@ -30,9 +30,25 @@ export function HeroCreator({ initial, capeColor, capeName, name, heroAvatar }: 
   const set = <K extends Key>(k: K, v: HeroConfig[K]) => { setHero((h) => ({ ...h, [k]: v })); sfx.tick(); };
 
   const save = () => start(async () => {
-    const r = await saveHeroAction({ hero, useAsAvatar: asAvatar });
+    const fd = new FormData();
+    fd.append("hero", JSON.stringify(hero));
+    fd.append("useAsAvatar", asAvatar ? "1" : "0");
+    if (asAvatar) { const png = await headPng(); if (png) fd.append("png", png, "hero.png"); }
+    const r = await saveHeroAction(fd);
     if (r.ok) { toast.push("success", r.message ?? "Saved."); sfx.sparkle(); router.refresh(); } else toast.push("error", r.error);
   });
+
+  // The profile picture is saved as a PNG (drawn here), so it shows on every phone like a normal photo.
+  const headPng = async (): Promise<Blob | null> => {
+    try {
+      const svg = heroSvg(hero, { view: "head", capeColor, capeTrim: "#FED438", animate: false, idPrefix: "png" });
+      const img = new Image();
+      await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg); });
+      const c = document.createElement("canvas"); c.width = 256; c.height = 256;
+      c.getContext("2d")!.drawImage(img, 0, 0, 256, 256);
+      return await new Promise((res) => c.toBlob(res, "image/png"));
+    } catch { return null; }
+  };
 
   // "Save as image": a 1080×1920 story/wallpaper with the hero, name and Cape.
   const download = async () => {

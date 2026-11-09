@@ -1,3 +1,5 @@
+"use client";
+import { useState } from "react";
 import { cn } from "@/lib/cn";
 
 const PALETTE = ["#004F81", "#0E7490", "#7C3AED", "#B45309", "#BE185D", "#15803D", "#4338CA", "#9A3412"];
@@ -13,9 +15,11 @@ function colorFor(name: string) {
 
 export function Avatar({ name, fileId, size = 32, className }: { name: string; fileId?: string | null; size?: number; className?: string }) {
   const style = { width: size, height: size, fontSize: Math.max(10, Math.round(size * 0.38)) };
-  if (fileId)
+  // If a picture can't load, show initials instead of a broken-image icon.
+  const [failed, setFailed] = useState<string | null>(null);
+  if (fileId && failed !== fileId)
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={`/api/files/${fileId}?inline=1`} alt="" style={style} className={cn("shrink-0 rounded-full object-cover ring-2 ring-surface", className)} />;
+    return <img src={`/api/files/${fileId}?inline=1`} alt="" style={style} onError={() => setFailed(fileId)} className={cn("shrink-0 rounded-full object-cover ring-2 ring-surface", className)} />;
   return (
     <span aria-hidden style={{ ...style, background: colorFor(name) }}
       className={cn("inline-grid shrink-0 place-items-center rounded-full font-semibold text-white ring-2 ring-surface", className)}>

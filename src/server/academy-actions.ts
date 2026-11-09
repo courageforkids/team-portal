@@ -58,29 +58,45 @@ async function syncCapeChat(userId: string, cape: Cape | null, a: AcademyConfig)
 
 /* ───── Hero picture ───── */
 
-async function writeHeroAvatar(userId: string): Promise<void> {
+/** Saves the hero as the profile picture: a PNG drawn on the phone when we have one (works everywhere), otherwise an SVG made here. */
+async function writeHeroAvatar(userId: string, png?: Buffer | null): Promise<void> {
   const [u] = await db.select({ hero: users.hero, cape: users.cape, avatarFileId: users.avatarFileId, heroAvatar: users.heroAvatar, name: users.name }).from(users).where(eq(users.id, userId));
   if (!u?.heroAvatar || !u.hero) return;
-  const cape = u.cape && isCape(u.cape) ? CAPES[u.cape] : null;
-  const svg = heroSvg(sanitizeHero(u.hero), { view: "head", capeColor: cape?.color ?? "#004F81", capeTrim: "#FED438", animate: false, idPrefix: "av" });
-  const buf = Buffer.from(svg, "utf8");
-  const [row] = await storePrepared([{ name: "hero.svg", size: buf.length, mime: "image/svg+xml", buf }], { type: "avatar", id: userId }, userId);
+  let file: { name: string; size: number; mime: string; buf: Buffer };
+  if (png) file = { name: "hero.png", size: png.length, mime: "image/png", buf: png };
+  else {
+    const cape = u.cape && isCape(u.cape) ? CAPES[u.cape] : null;
+    const svg = heroSvg(sanitizeHero(u.hero), { view: "head", capeColor: cape?.color ?? "#004F81", capeTrim: "#FED438", animate: false, idPrefix: "av" });
+    const buf = Buffer.from(svg, "utf8");
+    file = { name: "hero.svg", size: buf.length, mime: "image/svg+xml", buf };
+  }
+  const [row] = await storePrepared([file], { type: "avatar", id: userId }, userId);
   const old = u.avatarFileId;
   await db.update(users).set({ avatarFileId: row.id }).where(eq(users.id, userId));
   if (old) await dropHeroFile(old);
 }
 /** Deletes a generated hero picture (never a real photo). */
 async function dropHeroFile(fileId: string) {
-  const [f] = await db.select().from(files).where(and(eq(files.id, fileId), eq(files.mimeType, "image/svg+xml"), eq(files.ownerType, "avatar")));
+  const [f] = await db.select().from(files).where(and(eq(files.id, fileId), inArray(files.filename, ["hero.svg", "hero.png"]), eq(files.ownerType, "avatar")));
   if (!f) return;
   await db.delete(files).where(eq(files.id, f.id));
   await deleteStored(f.storageKey).catch(() => {});
 }
 
-export async function saveHeroAction(input: { hero: unknown; useAsAvatar: boolean }): Promise<ActionResult> {
+export async function saveHeroAction(fd: FormData): Promise<ActionResult> {
   return safe(async () => {
     const { me } = await academyUser();
-    const hero = sanitizeHero(input.hero);
+    let raw: unknown = null;
+    try { raw = JSON.parse(str(fd, "hero")); } catch { throw new UserError("Couldn't read your hero. Try again."); }
+    const hero = sanitizeHero(raw);
+    const input = { useAsAvatar: str(fd, "useAsAvatar") === "1" };
+    // The phone draws the picture as a PNG; accept it only if it really is a small PNG.
+    const pngFile = fd.get("png");
+    let png: Buffer | null = null;
+    if (pngFile instanceof File && pngFile.size > 0 && pngFile.size < 1_500_000) {
+      const b = Buffer.from(await pngFile.arrayBuffer());
+      if (b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) png = b;
+    }
     const [u] = await db.select({ heroAvatar: users.heroAvatar, avatarFileId: users.avatarFileId, photoFileId: users.photoFileId }).from(users).where(eq(users.id, me.id));
     const want = !!input.useAsAvatar;
     if (want && !u.heroAvatar) {
@@ -93,8 +109,8 @@ export async function saveHeroAction(input: { hero: unknown; useAsAvatar: boolea
     } else {
       await db.update(users).set({ hero }).where(eq(users.id, me.id));
     }
-    if (want) await writeHeroAvatar(me.id);
-    revalidatePath("/academy", "layout");
+    if (want) await writeHeroAvatar(me.id, png);
+    revalidatePath("/", "layout");
     return { ok: true, message: want ? "Hero saved. It's your profile picture now. 🦸" : "Hero saved. 🦸" };
   });
 }
@@ -112,7 +128,6 @@ export async function sortMeAction(answers: string[]): Promise<ActionResult<{ ca
     if (done.length) {
       const chat = await syncCapeChat(me.id, cape, a);
       if (chat) await addSystemMessage(chat, `🎉 ${me.name.split(" ")[0]} joined the ${capeLabel(cape, a.capes)}!`);
-      await writeHeroAvatar(me.id);
       await audit(me.id, "academy.sorted", "user", me.id, { cape });
     }
     return { ok: true, data: { cape } };
@@ -412,7 +427,6 @@ export async function resortMembersAction(_: unknown, fd: FormData): Promise<Act
       if ((cur?.cape ?? null) === cape) continue;
       await db.update(users).set({ cape, sortedAt: cape ? new Date() : null }).where(eq(users.id, uid));
       await syncCapeChat(uid, cape, a);
-      await writeHeroAvatar(uid);
     }
     await audit(me.id, "academy.resort", "users", String(ids.length));
     revalidatePath("/academy", "layout");

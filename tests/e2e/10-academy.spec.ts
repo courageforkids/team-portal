@@ -46,7 +46,8 @@ test("the Sorting gives a Cape, joins the Cape chat, and the hero becomes the pr
   expect(after.hero.hair).toBe("afro");
   expect(after.hero_avatar).toBe(true);
   const res = await sam.page.request.get(`/api/files/${after.avatar_file_id}?inline=1`);
-  expect(res.headers()["content-type"]).toContain("image/svg+xml");
+  expect(res.headers()["content-type"]).toBe("image/png"); // drawn on the device, so it shows like a normal photo on every phone
+  expect(res.status()).toBe(200);
   expect(res.headers()["content-disposition"]).toContain("inline");
   expect(await res.text()).not.toContain("<script");
   // Switching back restores the photo slot.
@@ -88,13 +89,13 @@ test("paper planes with stickers land in the scrapbook and on the Plane Board; s
   await julia.page.getByRole("link", { name: /Everyone/ }).first().click();
   await julia.page.locator("#composer").fill("/snow");
   await julia.page.getByRole("button", { name: "Send" }).click();
-  await expect(julia.page.getByText("You cast Let It Snow")).toBeVisible();
+  await expect(julia.page.getByText("You cast Let It Snow").last()).toBeVisible();
   await julia.ctx.close(); await o.ctx.close();
 });
 
 test("missions, weekly challenges, captains and common rooms", async ({ browser }) => {
   test.setTimeout(120_000);
-  await sql`delete from academy_claims`; await sql`delete from academy_challenges`; await sql`delete from cape_board_notes`; await sql`delete from cape_mottos`;
+  await sql`delete from academy_claims`; await sql`delete from academy_challenges`; await sql`delete from cape_bonuses where source in ('challenge', 'mission')`; await sql`delete from cape_board_notes`; await sql`delete from cape_mottos`;
   const david = await as(browser, "david");
   await david.page.goto("/academy");
   await david.page.locator("#mc-kind").selectOption("press");
