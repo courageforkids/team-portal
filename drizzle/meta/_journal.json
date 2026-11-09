@@ -120,6 +120,13 @@
       "when": 1794177967814,
       "tag": "0016_chat_pins",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794184860516,
+      "tag": "0017_courage_academy_v2",
+      "breakpoints": true
     }
   ]
 }

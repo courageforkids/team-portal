@@ -25,7 +25,9 @@ export async function conversationAccess(u: CurrentUser, conversationId: string)
   // Who can rename / add / remove: admins for work groups; the creator or an admin for group chats.
   const manage = conv.kind === "workgroup" ? isAdmin : conv.kind === "group" ? isAdmin || conv.createdById === u.id : false;
   // Group chats and direct chats: any member can rename. Team chat and work groups: admins.
-  const rename = conv.kind === "group" || conv.kind === "dm" ? member || isAdmin : isAdmin;
+  // Cape chats (Courage Academy) are named after the Cape, so only admins rename them.
+  const capeChat = !!conv.dmKey?.startsWith("cape:");
+  const rename = capeChat ? isAdmin : conv.kind === "group" || conv.kind === "dm" ? member || isAdmin : isAdmin;
   // Pinning: anyone in a direct or group chat; admins in the team chat and work groups.
   const pin = !conv.archived && (conv.kind === "group" || conv.kind === "dm" ? member : isAdmin);
   return { conv, read, post, member, manage, rename, pin };

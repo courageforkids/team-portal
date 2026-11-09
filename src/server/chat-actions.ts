@@ -278,7 +278,7 @@ export async function ensureTeamChatAction(): Promise<ActionResult> {
   return safe(async () => { await actionUser(); await ensureTeamConversation(); return { ok: true }; });
 }
 
-const REACTIONS = ["❤️", "👍", "😂", "😮", "😢", "🙏"];
+const REACTIONS = ["❤️", "👍", "😂", "😮", "😢", "🙏", "🎄", "⛄"];
 
 /** Tapback: one reaction per person per message. Same emoji again removes it. */
 export async function reactAction(messageId: string, emoji: string): Promise<ActionResult> {

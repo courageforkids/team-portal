@@ -1,7 +1,7 @@
 "use client";
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, CheckSquare, CheckCircle2, RotateCcw, CalendarClock, Clock3, AlertTriangle, Megaphone, Send, ShieldAlert, MessageSquare, CheckCheck, AtSign } from "lucide-react";
+import { Bell, CheckSquare, CheckCircle2, RotateCcw, CalendarClock, Clock3, AlertTriangle, Megaphone, Send, ShieldAlert, MessageSquare, CheckCheck, AtSign, Plane, Sparkles } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { ago } from "@/lib/dates";
 import { markAllReadAction, markNotificationReadAction } from "@/server/home-actions";
@@ -11,7 +11,7 @@ import { useToast } from "@/components/ui/toaster";
 const ICON: Record<string, typeof Bell> = {
   task_assigned: CheckSquare, submission_approved: CheckCircle2, revision_requested: RotateCcw, deadline_changed: CalendarClock, deadline_soon: Clock3,
   deadline_missed: AlertTriangle, announcement: Megaphone, task_submitted: Send, extension_requested: CalendarClock, extension_decided: CalendarClock,
-  task_blocked: ShieldAlert, task_comment: MessageSquare, chat_mention: AtSign,
+  task_blocked: ShieldAlert, task_comment: MessageSquare, chat_mention: AtSign, paper_plane: Plane, academy: Sparkles,
 };
 const TONE: Record<string, string> = { submission_approved: "bg-ok-soft text-ok", revision_requested: "bg-warn-soft text-warn", deadline_missed: "bg-warn-soft text-warn", task_blocked: "bg-bad-soft text-bad", announcement: "bg-accent-soft text-accent-ink", task_submitted: "bg-violet-soft text-violet" };
 

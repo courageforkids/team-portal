@@ -50,6 +50,14 @@ export const users = pgTable("users", {
   notificationPrefs: jsonb("notification_prefs").$type<NotificationPrefs>().notNull().default({}),
   calendarToken: text("calendar_token"),
   onboardedAt: timestamp("onboarded_at", { withTimezone: true }),
+  /** Courage Academy team, set by the Sorting. */
+  cape: text("cape"),
+  sortedAt: timestamp("sorted_at", { withTimezone: true }),
+  /** Courage Academy hero character (validated option ids only — see src/lib/hero.ts). */
+  hero: jsonb("hero").$type<Record<string, unknown>>(),
+  /** When on, avatarFileId points at a generated picture of their hero; photoFileId keeps their photo to switch back to. */
+  heroAvatar: boolean("hero_avatar").notNull().default(false),
+  photoFileId: uuid("photo_file_id"),
   /** "MM-DD" only — no year. */
   birthday: text("birthday"),
   birthdayPostedYear: integer("birthday_posted_year"),
@@ -409,6 +417,20 @@ export const accountabilityRecords = pgTable("accountability_records", {
 
 /* ───────────── Settings & audit ───────────── */
 
+export type AcademySettings = {
+  audience?: "off" | "preview" | "everyone";
+  previewIds?: string[];
+  capeCount?: 2 | 4;
+  /** Per-Cape identity: custom name and crest (set by the captain or an admin). Mottos come from member votes. */
+  capes?: Record<string, { name?: string; crest?: string }>;
+  /** Captain per Cape for a month ("YYYY-MM"); manual = picked by an admin. */
+  captains?: Record<string, { userId: string; month: string; manual?: boolean }>;
+  /** Group chat id per Cape. */
+  capeChats?: Record<string, string>;
+  /** Where Cape borders show around profile pictures. */
+  borders?: "off" | "academy" | "everywhere";
+};
+
 export type OrgSettings = {
   orgName: string;
   tagline: string;
@@ -424,6 +446,10 @@ export type OrgSettings = {
   lastMaintenanceAt?: string;
   /** Members besides admins who can log donations and make receipts. */
   donationManagerIds?: string[];
+  /** Christmas look (lights, snow, Silent Night dark mode). Only runs Nov 1 – Jan 1. preview = admins only. */
+  holiday?: { audience?: "off" | "preview" | "everyone" };
+  /** Courage Academy. audience: who sees it (preview = admins and previewIds only). */
+  academy?: AcademySettings;
   /** Printed on donation receipts. */
   receiptAddress?: string;
   receiptSignerName?: string;
@@ -703,3 +729,162 @@ export const messageReactions = pgTable("message_reactions", {
   emoji: text("emoji").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.messageId, t.userId] })]);
+
+/* ───────────── Courage Academy ───────────── */
+
+export const capeSeasons = pgTable("cape_seasons", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  startsOn: date("starts_on").notNull(),
+  endsOn: date("ends_on").notNull(),
+  /** "winter" gives the Academy a snowy look while the season runs. */
+  theme: text("theme"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Extra points to one person or (user_id null) a whole Cape. source: admin | captain | mission | challenge | trivia. */
+export const capeBonuses = pgTable("cape_bonuses", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+  cape: text("cape"),
+  points: integer("points").notNull(),
+  reason: text("reason").notNull().default(""),
+  source: text("source").notNull().default("admin"),
+  createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("cape_bonuses_created_idx").on(t.createdAt)]);
+
+export const paperPlanes = pgTable("paper_planes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  fromId: uuid("from_id").references(() => users.id, { onDelete: "set null" }),
+  toId: uuid("to_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  style: text("style").notNull().default("thanks"),
+  sticker: text("sticker"),
+  message: text("message").notNull(),
+  /** Shown on the Plane Board (and can win Plane of the Week). */
+  public: boolean("public").notNull().default(false),
+  seenAt: timestamp("seen_at", { withTimezone: true }),
+  reportedAt: timestamp("reported_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("paper_planes_to_idx").on(t.toId, t.createdAt), index("paper_planes_from_idx").on(t.fromId, t.createdAt)]);
+
+export const planeHearts = pgTable("plane_hearts", {
+  planeId: uuid("plane_id").notNull().references(() => paperPlanes.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.planeId, t.userId] })]);
+
+/** Mission points: a member claims something real they did; an admin approves it. */
+export const academyClaims = pgTable("academy_claims", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  details: text("details").notNull().default(""),
+  points: integer("points").notNull(),
+  status: text("status").notNull().default("pending"),
+  reviewedById: uuid("reviewed_by_id").references(() => users.id, { onDelete: "set null" }),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("academy_claims_status_idx").on(t.status, t.createdAt)]);
+
+/** Weekly Cape challenge; the winning Cape gets bonus points. */
+export const academyChallenges = pgTable("academy_challenges", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  title: text("title").notNull(),
+  details: text("details").notNull().default(""),
+  points: integer("points").notNull().default(10),
+  startsOn: date("starts_on").notNull(),
+  endsOn: date("ends_on").notNull(),
+  winnerCape: text("winner_cape"),
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
+  createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Motto ideas for a Cape; members vote, the top one becomes the motto. */
+export const capeMottos = pgTable("cape_mottos", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  cape: text("cape").notNull(),
+  text: text("text").notNull(),
+  createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+export const capeMottoVotes = pgTable("cape_motto_votes", {
+  cape: text("cape").notNull(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  mottoId: uuid("motto_id").notNull().references(() => capeMottos.id, { onDelete: "cascade" }),
+}, (t) => [primaryKey({ columns: [t.cape, t.userId] })]);
+
+/** The captain's board in a Cape's common room. */
+export const capeBoardNotes = pgTable("cape_board_notes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  cape: text("cape").notNull(),
+  body: text("body").notNull(),
+  createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const triviaQuestions = pgTable("trivia_questions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  category: text("category").notNull(),
+  question: text("question").notNull(),
+  choices: jsonb("choices").$type<string[]>().notNull(),
+  answer: integer("answer").notNull(),
+  active: boolean("active").notNull().default(true),
+  createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type DuelAnswer = { choice: number; correct: boolean; ms: number };
+/** A 1-on-1 trivia duel. Each player plays their turn on their own time; questions are served one at a time with a timer. */
+export const triviaDuels = pgTable("trivia_duels", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  challengerId: uuid("challenger_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  opponentId: uuid("opponent_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  category: text("category"),
+  questionIds: jsonb("question_ids").$type<string[]>().notNull(),
+  challengerAnswers: jsonb("challenger_answers").$type<DuelAnswer[]>().notNull().default([]),
+  opponentAnswers: jsonb("opponent_answers").$type<DuelAnswer[]>().notNull().default([]),
+  challengerServedAt: timestamp("challenger_served_at", { withTimezone: true }),
+  opponentServedAt: timestamp("opponent_served_at", { withTimezone: true }),
+  /** waiting (opponent hasn't finished) | done | declined | expired */
+  status: text("status").notNull().default("waiting"),
+  winnerId: uuid("winner_id"),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("trivia_duels_challenger_idx").on(t.challengerId, t.createdAt), index("trivia_duels_opponent_idx").on(t.opponentId, t.createdAt)]);
+
+export const triviaDaily = pgTable("trivia_daily", {
+  day: date("day").primaryKey(),
+  questionId: uuid("question_id").notNull().references(() => triviaQuestions.id, { onDelete: "cascade" }),
+});
+export const triviaDailyAnswers = pgTable("trivia_daily_answers", {
+  day: date("day").notNull(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  choice: integer("choice").notNull(),
+  correct: boolean("correct").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.day, t.userId] })]);
+
+/** Live Cape-vs-Cape trivia night, hosted by an admin. */
+export const triviaNights = pgTable("trivia_nights", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  title: text("title").notNull().default("Trivia Night"),
+  /** lobby | live | done */
+  status: text("status").notNull().default("lobby"),
+  questionIds: jsonb("question_ids").$type<string[]>().notNull(),
+  current: integer("current").notNull().default(-1),
+  questionStartedAt: timestamp("question_started_at", { withTimezone: true }),
+  winnerCape: text("winner_cape"),
+  createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+export const triviaNightAnswers = pgTable("trivia_night_answers", {
+  nightId: uuid("night_id").notNull().references(() => triviaNights.id, { onDelete: "cascade" }),
+  qIndex: integer("q_index").notNull(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  cape: text("cape"),
+  choice: integer("choice").notNull(),
+  correct: boolean("correct").notNull(),
+  ms: integer("ms").notNull(),
+}, (t) => [primaryKey({ columns: [t.nightId, t.qIndex, t.userId] })]);

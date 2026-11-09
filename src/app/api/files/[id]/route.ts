@@ -15,7 +15,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const f = res.file;
   const buf = await readStored(f.storageKey).catch(() => null);
   if (!buf) return new NextResponse("File is missing from storage", { status: 410 });
-  const inline = new URL(req.url).searchParams.get("inline") === "1" && INLINE_SAFE.has(f.mimeType);
+  // Generated Courage Academy hero pictures are SVGs the portal itself wrote (never user uploads), so they can show inline.
+  const generatedHero = f.mimeType === "image/svg+xml" && f.ownerType === "avatar" && f.filename === "hero.svg";
+  const inline = new URL(req.url).searchParams.get("inline") === "1" && (INLINE_SAFE.has(f.mimeType) || generatedHero);
   return new NextResponse(new Uint8Array(buf), {
     headers: {
       "Content-Type": f.mimeType,

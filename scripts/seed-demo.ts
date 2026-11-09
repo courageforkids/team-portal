@@ -2,7 +2,7 @@
  * DEMO DATA ONLY — fictional emails, sample tasks. Never run against production.
  * Usage: npm run seed:demo   (wipes the database first)
  */
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { connect, DEPARTMENTS, CATEGORIES } from "./lib";
 import * as s from "../src/db/schema";
 import { hashPassword } from "../src/server/crypto";
@@ -13,7 +13,7 @@ const H = 3600_000, D = 24 * H;
 async function main() {
   if (process.env.NODE_ENV === "production" && !process.env.ALLOW_DEMO_SEED) throw new Error("Refusing to seed demo data in production.");
   const { db, close } = connect();
-  await db.execute(sql`truncate table donations, donors, monthly_reports, shoutout_cheers, shoutout_recipients, shoutouts, poll_votes, polls, meeting_attendance, meetings, api_keys, volunteer_hours, shift_signups, event_shifts, messages, conversation_members, conversations, push_subscriptions, audit_log, notifications, email_outbox, announcement_reads, announcements, events, resources,
+  await db.execute(sql`truncate table trivia_night_answers, trivia_nights, trivia_daily_answers, trivia_daily, trivia_duels, trivia_questions, cape_board_notes, cape_motto_votes, cape_mottos, academy_challenges, academy_claims, plane_hearts, paper_planes, cape_bonuses, cape_seasons, donations, donors, monthly_reports, shoutout_cheers, shoutout_recipients, shoutouts, poll_votes, polls, meeting_attendance, meetings, api_keys, volunteer_hours, shift_signups, event_shifts, messages, conversation_members, conversations, push_subscriptions, audit_log, notifications, email_outbox, announcement_reads, announcements, events, resources,
     accountability_records, extension_requests, task_events, task_comments, reviews, submissions, task_assignees, tasks, task_series,
     milestones, projects, files, task_categories, password_resets, invitations, sessions, rate_limits, users, departments, settings cascade`);
 
@@ -24,6 +24,7 @@ async function main() {
   await db.insert(s.settings).values({ id: 1, data: {
     orgName: "Courage for Kids", tagline: "Their fight. Our mission.", reminderHours: [48, 24], overdueReminders: true,
     emailEnabled: false, emailFrom: "", quietHoursStart: 21, quietHoursEnd: 7, timezone: "America/New_York",
+    academy: { audience: "everyone", capeCount: 2 },
   } });
 
   const pw = await hashPassword(DEMO_PASSWORD);
@@ -143,6 +144,14 @@ async function main() {
   const [so] = await db.insert(s.shoutouts).values({ fromId: U.jacob, badge: "above", message: "Arleigh made the holiday graphics in one night. They look amazing!", createdAt: new Date(now - 3 * H) }).returning();
   await db.insert(s.shoutoutRecipients).values({ shoutoutId: so.id, userId: U.arleigh });
   await db.insert(s.shoutoutCheers).values([{ shoutoutId: so.id, userId: U.julia }, { shoutoutId: so.id, userId: U.owen }]);
+
+  // Courage Academy: everyone sorted (2 Capes), a winter season running now, a plane already caught.
+  const capeOf: Record<string, string> = { jacob: "navy", julia: "gold", isaac: "navy", reese: "gold", david: "navy", arleigh: "gold", owen: "navy", dominik: "gold", sam: "gold" };
+  for (const [k, cape] of Object.entries(capeOf)) if (U[k]) await db.update(s.users).set({ cape, sortedAt: new Date(now - 7 * D) }).where(eq(s.users.id, U[k]));
+  const ymd = (t: number) => new Date(t).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  await db.insert(s.capeSeasons).values({ name: "Winter Season", startsOn: ymd(now - 10 * D), endsOn: ymd(now + 30 * D), theme: "winter" });
+  await db.insert(s.paperPlanes).values({ fromId: U.julia, toId: U.jacob, style: "thanks", sticker: "⭐", message: "Thanks for building the portal!", seenAt: new Date(now - 2 * D), createdAt: new Date(now - 2 * D) });
+  await db.insert(s.capeBonuses).values({ cape: "gold", points: 5, reason: "Holiday graphics sprint", createdById: U.jacob });
 
   // Donations: a few sample gifts (fake donors).
   const yr = new Date().getFullYear();

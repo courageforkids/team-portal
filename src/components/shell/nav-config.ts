@@ -1,12 +1,12 @@
 import {
   Home, CheckSquare, CalendarDays, Megaphone, FolderKanban, Users, BookOpen, LayoutDashboard, ListChecks, Inbox,
-  BarChart3, ShieldCheck, Settings, Building2, MessagesSquare, HeartHandshake, NotebookPen, Vote, PartyPopper, FileBarChart, HandCoins, FileClock, type LucideIcon,
+  BarChart3, ShieldCheck, Settings, Building2, MessagesSquare, HeartHandshake, NotebookPen, Vote, PartyPopper, FileBarChart, HandCoins, FileClock, Sparkles, type LucideIcon,
 } from "lucide-react";
 
 export type NavItem = { href: string; label: string; icon: LucideIcon; badgeKey?: "reviews" | "notifications" | "messages" | "hours" | "drafts" | "tasks" };
 export type NavGroups = { main: NavItem[]; admin: NavItem[] };
 
-export function navFor(role: "admin" | "leader" | "volunteer", canReview: boolean, canDonations = false): NavGroups {
+export function navFor(role: "admin" | "leader" | "volunteer", canReview: boolean, canDonations = false, academy = false): NavGroups {
   const main: NavItem[] = [
     { href: "/", label: "Home", icon: Home },
     { href: "/tasks", label: "My tasks", icon: CheckSquare, badgeKey: "tasks" },
@@ -18,6 +18,7 @@ export function navFor(role: "admin" | "leader" | "volunteer", canReview: boolea
     { href: "/polls", label: "Polls", icon: Vote },
     { href: "/shoutouts", label: "Shout-outs", icon: PartyPopper },
   ];
+  if (academy) main.splice(1, 0, { href: "/academy", label: "Courage Academy", icon: Sparkles });
   if (role !== "volunteer") main.push({ href: "/projects", label: "Projects", icon: FolderKanban }, { href: "/departments", label: "Departments", icon: Building2 });
   main.push({ href: "/team", label: "Team", icon: Users }, { href: "/resources", label: "Resources", icon: BookOpen });
   if (canDonations && role !== "admin") main.push({ href: "/donations", label: "Donations", icon: HandCoins });

@@ -10,6 +10,8 @@ import { db } from "@/db";
 import { announcementReads, announcements, events, notifications, pollVotes, polls, shoutoutRecipients, shoutouts, tasks, users } from "@/db/schema";
 import { badgeOf } from "@/lib/community";
 import { requireUser } from "@/server/auth";
+import { daysToChristmas, holidayOn, holidaySettings } from "@/server/holiday";
+import { HolidayAudience, HolidayFxToggle } from "@/components/shell/holiday";
 import { birthdaysToday, upcomingCountdowns } from "@/server/home-extras";
 import { loadTasks } from "@/server/queries";
 import { allowedVisibilities, audienceMatches } from "@/server/policy";
@@ -48,6 +50,10 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const hour = Number(formatInTimeZone(now, tz, "H"));
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   const firstName = me.name.split(" ")[0];
+  const [holiday, holidayCfg] = await Promise.all([holidayOn(me), holidaySettings()]);
+  const xmas = daysToChristmas(now);
+  const md = formatInTimeZone(now, tz, "MM-dd");
+  const holidayHello = md >= "12-26" || md === "01-01" ? `Happy New Year, ${firstName}! ✨` : md >= "12-01" ? `Merry Christmas, ${firstName}! 🎄` : `${greeting}, ${firstName}! ❄️`;
   const dayIndex = Math.floor(now.getTime() / 86400_000);
   const monthStart = fromZonedTime(formatInTimeZone(startOfMonth(now), tz, "yyyy-MM-01'T'00:00"), tz);
 
@@ -96,14 +102,22 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     <div className="space-y-6">
       {denied && <div role="alert" className="rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm text-fg-2">That page is only available to administrators.</div>}
 
+      {holiday && <div className="cfk-snow-page" aria-hidden />}
       {/* Welcome */}
-      <section className="animate-in relative overflow-hidden rounded-2xl bg-brand px-5 py-6 text-brand-fg sm:px-7 sm:py-7">
+      <section className={holiday ? "cfk-winter animate-in relative overflow-hidden rounded-2xl bg-[linear-gradient(160deg,#02243d_0%,#004F81_60%,#0b5d96_100%)] px-5 pb-12 pt-6 text-white sm:px-7 sm:pt-7" : "animate-in relative overflow-hidden rounded-2xl bg-brand px-5 py-6 text-brand-fg sm:px-7 sm:py-7"}>
+        {holiday && (
+          <svg aria-hidden viewBox="0 0 800 60" preserveAspectRatio="none" className="absolute inset-x-0 bottom-0 h-10 w-full">
+            <path d="M0 40 Q 120 10 260 32 T 520 28 T 800 30 V60 H0 Z" fill="rgba(255,255,255,.18)" />
+            <path d="M0 48 Q 160 26 340 44 T 640 40 T 800 44 V60 H0 Z" fill="#f4f8fc" />
+          </svg>
+        )}
         <div aria-hidden className="absolute -right-10 -top-16 h-56 w-56 rounded-full bg-accent/25 blur-2xl" />
         <div aria-hidden className="absolute bottom-[-60px] right-24 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
         <div className="relative flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-sm font-medium text-white/75">{formatInTimeZone(now, tz, "EEEE, MMMM d")}</p>
-            <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-3xl">{greeting}, {firstName}!</h1>
+            <h1 className="mt-1 text-[26px] font-bold tracking-tight sm:text-3xl">{holiday ? holidayHello : `${greeting}, ${firstName}!`}</h1>
+            {holiday && <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-sm font-semibold">{xmas === 0 ? "🎄 It's Christmas Day!" : xmas > 300 ? "✨ Happy holidays" : <>🎄 <b className="text-accent">{xmas}</b> day{xmas === 1 ? "" : "s"} until Christmas</>}</p>}
             <p className="mt-1 text-white/85">Here’s what’s happening at Courage for Kids.</p>
             <p className="mt-3 flex max-w-xl items-start gap-2 text-sm text-white/75"><Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-accent" />{MISSION[dayIndex % MISSION.length]}</p>
           </div>
@@ -112,6 +126,12 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
               : <ButtonLink href="/tasks" variant="accent"><CheckSquare className="h-4 w-4" />View my tasks</ButtonLink>}
           </div>
         </div>
+        {holiday && (
+          <div className="relative z-[1] mt-4 flex flex-wrap items-center gap-2">
+            <HolidayFxToggle />
+            {me.role === "admin" && <HolidayAudience audience={holidayCfg.audience} />}
+          </div>
+        )}
       </section>
 
       {!me.onboardedAt && <WelcomeCard name={firstName} role={me.role} />}

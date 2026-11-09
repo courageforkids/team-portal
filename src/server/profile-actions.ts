@@ -33,8 +33,11 @@ export async function updateAvatarAction(_: unknown, fd: FormData): Promise<Acti
     if (!/\.(png|jpe?g|webp|gif)$/i.test(file.name)) throw new UserError("Use a PNG, JPG, WEBP or GIF image.");
     if (file.size > 5 * 1024 * 1024) throw new UserError("Profile photos must be under 5 MB.");
     const [row] = await saveUploads([file], { type: "avatar", id: me.id }, me.id);
+    // A new photo replaces a hero picture too (and the photo kept behind it).
+    const [cur] = await db.select({ photoFileId: users.photoFileId }).from(users).where(eq(users.id, me.id));
     await removeOldAvatar(me.avatarFileId);
-    await db.update(users).set({ avatarFileId: row.id }).where(eq(users.id, me.id));
+    if (cur?.photoFileId) await removeOldAvatar(cur.photoFileId);
+    await db.update(users).set({ avatarFileId: row.id, heroAvatar: false, photoFileId: null }).where(eq(users.id, me.id));
     return { ok: true, message: "Photo updated." };
   });
 }
@@ -42,8 +45,10 @@ export async function updateAvatarAction(_: unknown, fd: FormData): Promise<Acti
 export async function removeAvatarAction(): Promise<ActionResult> {
   return safe(async () => {
     const me = await actionUser();
-    await db.update(users).set({ avatarFileId: null }).where(eq(users.id, me.id));
+    const [cur] = await db.select({ photoFileId: users.photoFileId }).from(users).where(eq(users.id, me.id));
+    await db.update(users).set({ avatarFileId: null, heroAvatar: false, photoFileId: null }).where(eq(users.id, me.id));
     await removeOldAvatar(me.avatarFileId);
+    if (cur?.photoFileId) await removeOldAvatar(cur.photoFileId);
     return { ok: true, message: "Photo removed." };
   });
 }

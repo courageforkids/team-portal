@@ -9,6 +9,8 @@ import { ChatList } from "@/components/chat/chat-list";
 import { ConversationView } from "@/components/chat/conversation-view";
 import { ACTIVE } from "@/lib/task-meta";
 import { chatListData } from "../chat-data";
+import { academySettings, canSeeAcademy } from "@/server/academy";
+import { holidayOn } from "@/server/holiday";
 
 export const metadata = { title: "Chat" };
 
@@ -43,7 +45,7 @@ export default async function ConversationPage({ params, searchParams }: { param
       <div className="hidden min-h-0 md:block"><ChatList initial={conversations} everyone={everyone} me={{ id: me.id, role: me.role }} oversight={oversight} /></div>
       {/* On phones the conversation fills the screen between the top bar and the bottom tabs. */}
       <div data-kb-fit data-no-ptr className="fixed inset-x-0 top-14 bottom-[calc(58px+env(safe-area-inset-bottom))] z-10 min-h-0 bg-surface md:static md:z-auto md:bg-transparent">
-        <ConversationView key={id} me={{ id: me.id, role: me.role }} highlight={hl}
+        <ConversationView key={id} me={{ id: me.id, role: me.role }} highlight={hl} spells={canSeeAcademy(me, await academySettings())} holiday={await holidayOn(me)}
           header={{ id, kind: c.kind, title, subtitle, description: c.description, people, member: access.member, canPost: access.post, archived: c.archived, muted: mem?.muted ?? false, tasks: groupTasks,
             canPin: access.pin, mentionables: c.kind === "dm" ? [] : active.map((m) => ({ id: m.id, name: m.name })) }}
           initial={startAt ?? initial} startedOlder={!!startAt} pins={pins}

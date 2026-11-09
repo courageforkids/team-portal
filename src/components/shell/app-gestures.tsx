@@ -7,7 +7,7 @@ const TAB_ROOTS = ["/", "/tasks", "/messages", "/notifications"];
 const parentOf = (p: string) => (p.split("/").slice(0, -1).join("/") || "/");
 
 /** Phone-app behaviour for the whole portal: pull down to refresh, swipe from the left edge to go back, offline banner, and the offline-capable service worker. */
-export function AppGestures() {
+export function AppGestures({ holiday = false }: { holiday?: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const [pull, setPull] = useState(0);
@@ -66,7 +66,8 @@ export function AppGestures() {
       {(pull > 0 || refreshing) && (
         <div className="pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+60px)] z-50 flex justify-center" aria-hidden>
           <div className="grid h-9 w-9 place-items-center rounded-full bg-surface shadow-pop ring-1 ring-line" style={{ transform: `translateY(${refreshing ? 8 : pull * 0.4}px)`, opacity: refreshing ? 1 : Math.min(1, pull / 65) }}>
-            <Loader2 className={refreshing ? "h-4 w-4 animate-spin text-brand" : "h-4 w-4 text-brand"} style={refreshing ? undefined : { transform: `rotate(${pull * 4}deg)` }} />
+            {holiday ? <span className={refreshing ? "animate-spin text-lg leading-none" : "text-lg leading-none"} style={refreshing ? undefined : { transform: `rotate(${pull * 4}deg)` }}>❄️</span>
+              : <Loader2 className={refreshing ? "h-4 w-4 animate-spin text-brand" : "h-4 w-4 text-brand"} style={refreshing ? undefined : { transform: `rotate(${pull * 4}deg)` }} />}
           </div>
         </div>
       )}

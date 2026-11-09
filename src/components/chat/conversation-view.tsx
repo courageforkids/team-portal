@@ -13,6 +13,8 @@ import { Composer } from "./composer";
 import { deleteMessageAction, editMessageAction, pinMessageAction, reactAction, reportMessageAction, sendMessageAction, markReadAction } from "@/server/chat-actions";
 import { mentionHandles, MENTION_RE, type Mentionable } from "@/lib/mentions";
 import { PhotoViewer } from "./photo-viewer";
+import { spellOf } from "@/lib/academy";
+import { fireEffect } from "@/components/academy/effects";
 import type { ChatMessage, PinnedMessage } from "@/server/chat";
 
 const EDIT_WINDOW_MS = 15 * 60_000;
@@ -59,9 +61,13 @@ export type ConversationHeader = {
   canPin: boolean; mentionables: Mentionable[];
 };
 
-export function ConversationView({ me, header, initial, info, highlight, startedOlder, pins: initialPins }: {
+export function ConversationView({ me, header, initial, info, highlight, startedOlder, pins: initialPins, spells = false, holiday = false }: {
   me: { id: string; role: string }; header: ConversationHeader; initial: ChatMessage[]; info: Omit<ChatInfoProps, "open" | "onClose">; highlight?: string;
   startedOlder?: boolean; pins: PinnedMessage[];
+  /** Courage Academy chat spells (/confetti, /cape, /lumos, /cheer, /snow) for people who can see the Academy. */
+  spells?: boolean;
+  /** Christmas look: adds 🎄 and ⛄ reactions. */
+  holiday?: boolean;
 }) {
   const [items, setItems] = useState<ChatMessage[]>(initial);
   const [hasOlder, setHasOlder] = useState(initial.length >= 50 || !!startedOlder);
@@ -96,14 +102,22 @@ export function ConversationView({ me, header, initial, info, highlight, started
   const toast = useToast();
   const router = useRouter();
 
+  const seen = useRef(new Set(initial.map((m) => m.id)));
   const merge = useCallback((incoming: ChatMessage[]) => {
     if (!incoming.length) return;
+    // Spells cast in the last 20 seconds play for everyone watching this chat.
+    if (spells) for (const m of incoming) {
+      if (seen.current.has(m.id) || m.pending) continue;
+      seen.current.add(m.id);
+      const sp = !m.deleted && !m.system ? spellOf(m.body) : null;
+      if (sp && Date.now() - Date.parse(m.createdAt) < 20000) fireEffect(sp.effect);
+    }
     setItems((prev) => {
       const map = new Map(prev.map((m) => [m.id, m]));
       for (const m of incoming) map.set(m.id, m);
       return [...map.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     });
-  }, []);
+  }, [spells]);
 
   const lastAt = items.filter((m) => !m.pending).at(-1)?.createdAt;
   const poll = useCallback(async () => {
@@ -347,6 +361,8 @@ export function ConversationView({ me, header, initial, info, highlight, started
             {g.rows.map(({ m, first }) => {
               if (m.system) return <p key={m.id} id={`m-${m.id}`} className="my-2 text-center text-xs text-muted">{m.body} · {timeOf(m.createdAt)}</p>;
               const mine = m.authorId === me.id;
+              const spell = spells && !m.deleted ? spellOf(m.body) : null;
+              if (spell) return <p key={m.id} id={`m-${m.id}`} className="my-2 text-center"><span className="inline-block rounded-full bg-accent-soft px-3 py-1 text-xs font-semibold text-accent-ink">✨ {mine ? "You" : m.authorName.split(" ")[0]} cast {spell.name} · {timeOf(m.createdAt)}</span></p>;
               const stickers = m.deleted ? [] : m.files.filter((f) => isStickerName(f.filename));
               const others = m.files.filter((f) => !isStickerName(f.filename));
               const showBubble = m.deleted || !!m.body || others.length > 0;
@@ -492,7 +508,7 @@ export function ConversationView({ me, header, initial, info, highlight, started
           ))}
         </ul>
       </Dialog>
-      <MessageMenu m={menuFor} me={me} canInteract={canInteract} canPin={header.canPin} onReact={(m, e) => { react(m, e); setMenuFor(null); }} onReply={(m) => { setReplyTo(m); setMenuFor(null); }} onClose={() => setMenuFor(null)} onChanged={() => { setMenuFor(null); poll(); router.refresh(); }} refetch={async () => {
+      <MessageMenu m={menuFor} me={me} canInteract={canInteract} canPin={header.canPin} reactions={holiday ? [...REACTIONS.slice(0, 4), ...HOLIDAY_REACTIONS] : REACTIONS} onReact={(m, e) => { react(m, e); setMenuFor(null); }} onReply={(m) => { setReplyTo(m); setMenuFor(null); }} onClose={() => setMenuFor(null)} onChanged={() => { setMenuFor(null); poll(); router.refresh(); }} refetch={async () => {
         const from = new Date(new Date(items[0]?.createdAt ?? 0).getTime() - 1).toISOString();
         const r = await fetch(`/api/chat/${header.id}?after=${encodeURIComponent(from)}`, { cache: "no-store" });
         if (r.ok) { const all: ChatMessage[] = (await r.json()).messages; setItems((prev) => prev.map((p) => all.find((x) => x.id === p.id) ?? p)); }
@@ -502,6 +518,7 @@ export function ConversationView({ me, header, initial, info, highlight, started
 }
 
 const REACTIONS = ["❤️", "👍", "😂", "😮", "😢", "🙏"];
+const HOLIDAY_REACTIONS = ["🎄", "⛄"];
 
 /** A message row that can be swiped right to reply (phones) or long-pressed for the menu. */
 function SwipeRow({ enabled, onReply, onLongPress, className, children, id }: { enabled: boolean; onReply: () => void; onLongPress: () => void; className: string; children: React.ReactNode; id: string }) {
@@ -536,7 +553,7 @@ function Highlight({ text, q }: { text: string; q: string }) {
   return <>{from > 0 && "…"}{text.slice(from, i)}<mark className="rounded bg-accent/40 px-0.5 text-fg">{text.slice(i, i + q.length)}</mark>{text.slice(i + q.length)}</>;
 }
 
-function MessageMenu({ m, me, canInteract, canPin, onReact, onReply, onClose, onChanged, refetch }: { m: ChatMessage | null; me: { id: string; role: string }; canInteract: boolean; canPin: boolean; onReact: (m: ChatMessage, e: string) => void; onReply: (m: ChatMessage) => void; onClose: () => void; onChanged: () => void; refetch: () => Promise<void> }) {
+function MessageMenu({ m, me, canInteract, canPin, reactions, onReact, onReply, onClose, onChanged, refetch }: { m: ChatMessage | null; me: { id: string; role: string }; canInteract: boolean; canPin: boolean; reactions: string[]; onReact: (m: ChatMessage, e: string) => void; onReply: (m: ChatMessage) => void; onClose: () => void; onChanged: () => void; refetch: () => Promise<void> }) {
   const [mode, setMode] = useState<"menu" | "edit" | "report">("menu");
   const [value, setValue] = useState("");
   const [busy, start] = useTransition();
@@ -557,7 +574,7 @@ function MessageMenu({ m, me, canInteract, canPin, onReact, onReply, onClose, on
         <div className="space-y-1">
           {canInteract && (
             <div className="mb-2 flex justify-between rounded-full bg-surface-2 px-2 py-1.5" role="group" aria-label="React">
-              {REACTIONS.map((e) => (
+              {reactions.map((e) => (
                 <button key={e} onClick={() => onReact(m, e)} aria-label={`React ${e}`}
                   className={cn("grid h-10 w-10 place-items-center rounded-full text-2xl transition active:scale-90", m.reactions.find((r) => r.mine)?.emoji === e && "bg-brand-soft ring-2 ring-brand")}>{e}</button>
               ))}
