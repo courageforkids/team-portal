@@ -6,9 +6,27 @@ import { eq, sql } from "drizzle-orm";
 import { connect, DEPARTMENTS, CATEGORIES } from "./lib";
 import * as s from "../src/db/schema";
 import { hashPassword } from "../src/server/crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
 
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD ?? "CourageDemo2026!";
 const H = 3600_000, D = 24 * H;
+
+/** Everyone needs a profile photo to get past the photo gate, so demo members get an initials picture. */
+async function demoAvatar(db: ReturnType<typeof connect>["db"], userId: string, name: string) {
+  const initials = name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><rect width="120" height="120" fill="#004F81"/><text x="60" y="76" font-family="Arial" font-size="44" font-weight="700" fill="#FED438" text-anchor="middle">${initials}</text></svg>`;
+  const buf = Buffer.from(svg, "utf8");
+  const key = `avatar/demo/${randomUUID()}`;
+  if (process.env.STORAGE_DRIVER !== "s3") {
+    const full = path.resolve(process.env.STORAGE_DIR ?? "./.storage", key);
+    await mkdir(path.dirname(full), { recursive: true });
+    await writeFile(full, buf);
+  }
+  const [f] = await db.insert(s.files).values({ storageKey: key, filename: "demo.svg", mimeType: "image/svg+xml", size: buf.length, uploadedById: userId, ownerType: "avatar", ownerId: userId }).returning();
+  await db.update(s.users).set({ avatarFileId: f.id }).where(eq(s.users.id, userId));
+}
 
 async function main() {
   if (process.env.NODE_ENV === "production" && !process.env.ALLOW_DEMO_SEED) throw new Error("Refusing to seed demo data in production.");
@@ -46,6 +64,7 @@ async function main() {
       onboardedAt: p.key === "jacob" ? new Date() : null,
     }).returning();
     U[p.key] = u.id;
+    await demoAvatar(db, u.id, p.name);
   }
   for (const [slug, k] of [["executive", "jacob"], ["fundraising", "julia"], ["volunteers", "isaac"], ["patient-interaction", "reese"], ["logistics", "david"], ["media", "arleigh"], ["creative", "owen"], ["initiatives", "dominik"]] as const)
     await db.execute(sql`update departments set lead_id = ${U[k]} where slug = ${slug}`);

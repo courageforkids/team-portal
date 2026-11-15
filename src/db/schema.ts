@@ -888,3 +888,16 @@ export const triviaNightAnswers = pgTable("trivia_night_answers", {
   correct: boolean("correct").notNull(),
   ms: integer("ms").notNull(),
 }, (t) => [primaryKey({ columns: [t.nightId, t.qIndex, t.userId] })]);
+
+/* ───────────── Sponsor promises (private to the admin who writes them) ───────────── */
+
+/** What we told a brand or donor we'd do in return (an unboxing reel, a tag, a shout-out). Only its author ever sees it. */
+export const promises = pgTable("promises", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  who: text("who").notNull(),
+  what: text("what").notNull(),
+  dueDate: date("due_date"),
+  doneAt: timestamp("done_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("promises_owner_idx").on(t.ownerId)]);

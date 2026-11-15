@@ -1,6 +1,6 @@
 import {
   Home, CheckSquare, CalendarDays, Megaphone, FolderKanban, Users, BookOpen, LayoutDashboard, ListChecks, Inbox,
-  BarChart3, ShieldCheck, Settings, Building2, MessagesSquare, HeartHandshake, NotebookPen, Vote, PartyPopper, FileBarChart, HandCoins, FileClock, Sparkles, type LucideIcon,
+  BarChart3, ShieldCheck, Settings, Building2, MessagesSquare, HeartHandshake, NotebookPen, Vote, PartyPopper, FileBarChart, HandCoins, FileClock, Sparkles, HandHeart, type LucideIcon,
 } from "lucide-react";
 
 export type NavItem = { href: string; label: string; icon: LucideIcon; badgeKey?: "reviews" | "notifications" | "messages" | "hours" | "drafts" | "tasks" };
@@ -31,6 +31,7 @@ export function navFor(role: "admin" | "leader" | "volunteer", canReview: boolea
       { href: "/review", label: "Review center", icon: Inbox, badgeKey: "reviews" },
       { href: "/admin/performance", label: "Performance", icon: BarChart3 },
       { href: "/donations", label: "Donations", icon: HandCoins },
+      { href: "/admin/promises", label: "What we promised", icon: HandHeart },
       { href: "/admin/reports", label: "Monthly report", icon: FileBarChart },
       { href: "/admin/accountability", label: "Accountability", icon: ShieldCheck },
       { href: "/settings", label: "Settings", icon: Settings },

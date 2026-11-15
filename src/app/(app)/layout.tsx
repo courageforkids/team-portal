@@ -19,6 +19,7 @@ import { AcademyLive } from "@/components/academy/live";
 import { EffectsLayer } from "@/components/academy/effects";
 import { holidayOn } from "@/server/holiday";
 import { HolidayFx, HolidayLights } from "@/components/shell/holiday";
+import { PhotoGate } from "@/components/shell/photo-gate";
 
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -31,11 +32,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     canManageDonations(user),
     computeBadges(user),
     academySettings(),
-    db.select({ cape: users.cape }).from(users).where(eq(users.id, user.id)),
+    db.select({ cape: users.cape, heroAvatar: users.heroAvatar, photoFileId: users.photoFileId }).from(users).where(eq(users.id, user.id)),
     holidayOn(user),
   ]);
   const academyOn = canSeeAcademy(user, academy);
   const canReview = user.role !== "volunteer" && isReviewer.n > 0;
+  // A generated hero picture isn't a photo of them; the photo it replaced (photoFileId) is.
+  const hasPhoto = !!meRow?.photoFileId || (!!user.avatarFileId && !meRow?.heroAvatar);
 
   return (
     <BadgesProvider initial={badges}>
@@ -66,7 +69,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <MobileNav role={user.role} canReview={canReview} canDonations={canDonations} academy={academyOn} badges={badges} orgName={s.orgName} />
       {academyOn && <EffectsLayer />}
       {academyOn && <AcademyLive userId={user.id} />}
-      {academyOn && !meRow?.cape && <SortingGate firstName={user.name.split(" ")[0]} />}
+      {!hasPhoto && <PhotoGate name={user.name} fileId={meRow?.heroAvatar ? null : user.avatarFileId} />}
+      {hasPhoto && academyOn && !meRow?.cape && <SortingGate firstName={user.name.split(" ")[0]} />}
     </div>
     </BadgesProvider>
   );

@@ -60,7 +60,8 @@ test("assign → submit → revise → resubmit → approve", async ({ browser }
   await admin.page.goto(`/review?task=${taskId}`);
   const item = admin.page.locator(`#review-${taskId}`);
   await expect(item.getByText("Here are my graphics.")).toBeVisible();
-  await expect(item.locator("img")).toHaveCount(1);
+  // the submitted graphic (profile photos are round, so leave them out)
+  await expect(item.locator("img:not(.rounded-full)")).toHaveCount(1);
   await item.getByLabel("Feedback").fill("Please make the logo bigger.");
   await item.getByRole("button", { name: "Request revision" }).click();
   await toast(admin.page, /Revision requested/);
@@ -162,6 +163,12 @@ test("admin invites a new member who signs up and signs in", async ({ browser })
   await page.getByRole("button", { name: "Create account" }).click();
   await page.waitForURL((u) => u.pathname === "/");
   await expect(page.getByRole("heading", { level: 1, name: /Taylor!/ })).toBeVisible();
+  // New members have to add a profile photo before they can use the portal
+  const gate = page.getByRole("dialog", { name: /Add your profile photo/ });
+  await expect(gate).toBeVisible();
+  await gate.locator('input[type="file"]').setInputFiles("tests/fixtures/graphic-v1.png");
+  await page.getByRole("button", { name: "Save photo" }).click();
+  await expect(gate).toBeHidden();
   // The link can't be reused
   const again = await browser.newContext(); const p2 = await again.newPage();
   await p2.goto(new URL(link).pathname);

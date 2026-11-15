@@ -134,6 +134,13 @@
       "when": 1794188168104,
       "tag": "0018_start_winter_season",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794784778749,
+      "tag": "0019_sponsor_promises",
+      "breakpoints": true
     }
   ]
 }
