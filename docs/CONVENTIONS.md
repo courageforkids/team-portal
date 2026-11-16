@@ -24,6 +24,13 @@ Read this before adding a page or action.
 - Files: `saveUploads(files, { type, id }, userId)` from `@/server/storage`; link to `/api/files/<id>` (add `?inline=1` to preview images/PDFs). The route re-checks permission.
 - Dates: store UTC `timestamptz`. Show with `fmtDate`/`fmtDateTime`/`dueLabel` from `@/lib/dates` using the record's or user's timezone. Parse `datetime-local` inputs with `parseLocalInput(value, tz)`.
 
+## Dependencies
+- `patches/next+15.5.29.patch` (applied by `patch-package` on `npm install`) backports a React fix into the copy of `react-dom` that Next 15.5 bundles.
+  Without it, a router update (`router.refresh()`, a server action) can occasionally stay suspended until some unrelated re-render, so buttons
+  with `disabled={pending}` stay greyed out for 20+ seconds and the page shows stale data. Fixed upstream in React 19.3 (`pingSuspendedRoot`
+  records pings that arrive during render). When upgrading Next: if `npm install` reports the patch no longer applies, check the new bundled
+  `react-dom` already has the fix, then delete the patch (and `patch-package` if nothing else uses it).
+
 ## UI
 - Page skeleton: `<PageHeader title description actions />`, then content in `Card`s. Use `EmptyState` for empty lists (helpful text + an action when the viewer can act).
 - Forms: client component with `<ActionForm action={serverAction}>` + `Field`, `Input`, `Textarea`, `Select`, `Checkbox`, `SubmitButton` from `@/components/ui/form`.
