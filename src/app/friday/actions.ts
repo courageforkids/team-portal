@@ -6,7 +6,9 @@ import { db } from "@/db";
 import { fridayActions as actions, fridayJobs as jobs, fridayMemories as memories, fridaySettings as settings, users } from "@/db/schema";
 import { actionFridayOwner, confirmOwnerPassword } from "@/server/friday/access";
 import { executeAction, logEvent } from "@/server/friday/agent";
-import { STANDING_PERMISSIONS } from "@/server/friday/policy";
+import { STANDING_PERMISSIONS, getSettings } from "@/server/friday/policy";
+import { base32Encode, verifyTotp } from "@/lib/friday-pure";
+import { randomBytes } from "node:crypto";
 
 export type Result = { ok: boolean; message: string };
 const done = (message: string): Result => { revalidatePath("/friday"); return { ok: true, message }; };
@@ -14,11 +16,16 @@ const fail = (message: string): Result => ({ ok: false, message });
 
 
 /** Executive authorization: needs the password again, then runs exactly the proposed action. */
-export async function approveAction(id: string, password: string): Promise<Result> {
+export async function approveAction(id: string, password: string, code = ""): Promise<Result> {
   const me = await actionFridayOwner();
   if (!(await confirmOwnerPassword(me, password))) {
     await logEvent(null, "security", "approve", false, { actionId: id, reason: "wrong password" });
     return fail("That password isn't right. Nothing was run.");
+  }
+  const st = await getSettings();
+  if (st.totpSecret && !(await verifyTotp(st.totpSecret, code))) {
+    await logEvent(null, "security", "approve", false, { actionId: id, reason: "wrong authenticator code" });
+    return fail("That authenticator code isn't right. Nothing was run.");
   }
   try {
     await logEvent(null, "approval_decided", null, true, { actionId: id, decision: "approved" });
@@ -93,4 +100,32 @@ export async function verifyMemoryAction(id: string): Promise<Result> {
   await actionFridayOwner();
   await db.update(memories).set({ verified: true, source: "Confirmed by Jacob", updatedAt: new Date() }).where(eq(memories.id, id));
   return done("Marked as verified.");
+}
+
+/** Two-factor approvals: step 1, make a secret (needs the password). */
+export async function startTotpAction(password: string): Promise<Result & { secret?: string; uri?: string }> {
+  const me = await actionFridayOwner();
+  if (!(await confirmOwnerPassword(me, password))) return fail("That password isn't right.");
+  const secret = base32Encode(randomBytes(20));
+  await db.update(settings).set({ totpPending: secret }).where(eq(settings.id, 1));
+  const label = encodeURIComponent(`FRIDAY:${me.email}`);
+  return { ok: true, message: "Add this key to your authenticator app, then enter the 6-digit code it shows.", secret, uri: `otpauth://totp/${label}?secret=${secret}&issuer=FRIDAY&digits=6&period=30` };
+}
+/** Step 2: confirm a code from the app; only then are codes required. */
+export async function confirmTotpAction(code: string): Promise<Result> {
+  await actionFridayOwner();
+  const st = await getSettings();
+  if (!st.totpPending) return fail("Start setup first.");
+  if (!(await verifyTotp(st.totpPending, code))) return fail("That code doesn't match. Check the key and your phone's clock, then try again.");
+  await db.update(settings).set({ totpSecret: st.totpPending, totpPending: null }).where(eq(settings.id, 1));
+  await logEvent(null, "security", "two_factor", true, { enabled: true });
+  return done("Authenticator codes are on. Approvals now need your password and a code.");
+}
+export async function disableTotpAction(password: string, code: string): Promise<Result> {
+  const me = await actionFridayOwner();
+  const st = await getSettings();
+  if (!(await confirmOwnerPassword(me, password)) || !st.totpSecret || !(await verifyTotp(st.totpSecret, code))) return fail("Password or code isn't right. Nothing changed.");
+  await db.update(settings).set({ totpSecret: null, totpPending: null }).where(eq(settings.id, 1));
+  await logEvent(null, "security", "two_factor", true, { enabled: false });
+  return done("Authenticator codes are off.");
 }

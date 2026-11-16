@@ -1,7 +1,7 @@
 "use client";
 import { useActionState, useState, useTransition } from "react";
 import { Check, ShieldAlert, Trash2, X, BadgeCheck, Power } from "lucide-react";
-import { approveAction, cancelJobAction, deleteMemoryAction, queueObjectiveAction, rejectAction, saveSettingsAction, setPausedAction, verifyMemoryAction, type Result } from "@/app/friday/actions";
+import { approveAction, confirmTotpAction, disableTotpAction, startTotpAction, cancelJobAction, deleteMemoryAction, queueObjectiveAction, rejectAction, saveSettingsAction, setPausedAction, verifyMemoryAction, type Result } from "@/app/friday/actions";
 
 function Msg({ r }: { r: Result | null }) {
   if (!r) return null;
@@ -10,8 +10,9 @@ function Msg({ r }: { r: Result | null }) {
 
 export type ActionRow = { id: string; tool: string; level: number; summary: string; reason: string; impact: string; risks: string; input: string; createdAt: string };
 
-export function ApprovalCard({ a }: { a: ActionRow }) {
+export function ApprovalCard({ a, needsCode }: { a: ActionRow; needsCode: boolean }) {
   const [pw, setPw] = useState("");
+  const [code, setCode] = useState("");
   const [r, setR] = useState<Result | null>(null);
   const [pending, start] = useTransition();
   return (
@@ -25,12 +26,18 @@ export function ApprovalCard({ a }: { a: ActionRow }) {
           {a.impact && <p className="mt-1 text-sm text-fr-muted"><b className="text-fr-fg">Impact:</b> {a.impact}</p>}
           {a.risks && <p className="mt-1 text-sm text-fr-muted"><b className="text-fr-fg">Risks:</b> {a.risks}</p>}
           <details className="mt-2 text-sm"><summary className="cursor-pointer text-fr-arc">Exact change</summary><pre className="mt-2 overflow-x-auto rounded-lg bg-fr-deep p-3 font-mono text-xs text-fr-arc-2">{a.input}</pre></details>
-          <form className="mt-3 flex flex-wrap items-end gap-2" onSubmit={(e) => { e.preventDefault(); start(async () => { setR(await approveAction(a.id, pw)); setPw(""); }); }}>
+          <form className="mt-3 flex flex-wrap items-end gap-2" onSubmit={(e) => { e.preventDefault(); start(async () => { setR(await approveAction(a.id, pw, code)); setPw(""); setCode(""); }); }}>
             <div className="min-w-[180px] flex-1">
               <label htmlFor={`pw-${a.id}`} className="mb-1 block text-xs text-fr-muted">Your password to approve</label>
               <input id={`pw-${a.id}`} type="password" autoComplete="current-password" className="fr-input" value={pw} onChange={(e) => setPw(e.target.value)} required />
             </div>
-            <button className="fr-btn fr-btn-gold" disabled={pending || !pw}><Check className="h-4 w-4" aria-hidden />Approve</button>
+            {needsCode && (
+              <div className="w-32">
+                <label htmlFor={`code-${a.id}`} className="mb-1 block text-xs text-fr-muted">Authenticator code</label>
+                <input id={`code-${a.id}`} inputMode="numeric" autoComplete="one-time-code" maxLength={6} className="fr-input" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} required />
+              </div>
+            )}
+            <button className="fr-btn fr-btn-gold" disabled={pending || !pw || (needsCode && code.length < 6)}><Check className="h-4 w-4" aria-hidden />Approve</button>
             <button type="button" className="fr-btn fr-btn-ghost" disabled={pending} onClick={() => start(async () => setR(await rejectAction(a.id)))}><X className="h-4 w-4" aria-hidden />Reject</button>
           </form>
           <Msg r={r} />
@@ -122,5 +129,44 @@ export function SettingsForm({ s, permissionLabels }: { s: SettingsView; permiss
       <button className="fr-btn fr-btn-primary" disabled={pending}>Save settings</button>
       <Msg r={r} />
     </form>
+  );
+}
+
+export function TwoFactor({ enabled }: { enabled: boolean }) {
+  const [pw, setPw] = useState("");
+  const [code, setCode] = useState("");
+  const [setup, setSetup] = useState<{ secret: string; uri: string } | null>(null);
+  const [r, setR] = useState<Result | null>(null);
+  const [pending, start] = useTransition();
+  if (enabled) return (
+    <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); start(async () => setR(await disableTotpAction(pw, code))); }}>
+      <p className="text-sm text-fr-ok">On. Approvals need your password and a code from your authenticator app.</p>
+      <div className="flex flex-wrap gap-2">
+        <label htmlFor="tf-pw" className="sr-only">Password</label><input id="tf-pw" type="password" placeholder="Password" className="fr-input max-w-[200px]" value={pw} onChange={(e) => setPw(e.target.value)} />
+        <label htmlFor="tf-code" className="sr-only">Code</label><input id="tf-code" inputMode="numeric" placeholder="Code" maxLength={6} className="fr-input max-w-[120px]" value={code} onChange={(e) => setCode(e.target.value)} />
+        <button className="fr-btn fr-btn-ghost" disabled={pending}>Turn off</button>
+      </div>
+      <Msg r={r} />
+    </form>
+  );
+  return (
+    <div className="space-y-2">
+      {!setup ? (
+        <form className="flex flex-wrap items-end gap-2" onSubmit={(e) => { e.preventDefault(); start(async () => { const x = await startTotpAction(pw); setR(x); if (x.ok && x.secret && x.uri) setSetup({ secret: x.secret, uri: x.uri }); setPw(""); }); }}>
+          <div className="min-w-[180px] flex-1"><label htmlFor="tf-pw1" className="mb-1 block text-xs text-fr-muted">Your password</label><input id="tf-pw1" type="password" autoComplete="current-password" className="fr-input" value={pw} onChange={(e) => setPw(e.target.value)} required /></div>
+          <button className="fr-btn fr-btn-primary" disabled={pending}>Set up authenticator</button>
+        </form>
+      ) : (
+        <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); start(async () => setR(await confirmTotpAction(code))); }}>
+          <p className="text-sm text-fr-muted">In Google Authenticator, Microsoft Authenticator or your phone&apos;s password app, choose &ldquo;Enter a setup key&rdquo; and type this key (time-based). On your phone you can also tap <a className="text-fr-arc underline" href={setup.uri}>open in authenticator app</a>.</p>
+          <p className="break-all rounded-lg bg-fr-deep p-3 font-mono text-sm tracking-widest text-fr-gold">{setup.secret.match(/.{1,4}/g)?.join(" ")}</p>
+          <div className="flex flex-wrap gap-2">
+            <label htmlFor="tf-c1" className="sr-only">6-digit code</label><input id="tf-c1" inputMode="numeric" autoComplete="one-time-code" placeholder="6-digit code" maxLength={6} className="fr-input max-w-[160px]" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />
+            <button className="fr-btn fr-btn-gold" disabled={pending || code.length < 6}>Confirm</button>
+          </div>
+        </form>
+      )}
+      <Msg r={r} />
+    </div>
   );
 }

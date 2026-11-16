@@ -923,6 +923,10 @@ export const fridaySettings = pgTable("friday_settings", {
   lastNightlyOn: date("last_nightly_on"),
   lastBriefingOn: date("last_briefing_on"),
   lastWorkerAt: timestamp("last_worker_at", { withTimezone: true }),
+  /** Authenticator-app secret (base32) for approving executive actions. Set only after the owner confirms a code. */
+  totpSecret: text("totp_secret"),
+  totpPending: text("totp_pending"),
+  orgSeeded: boolean("org_seeded").notNull().default(false),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -1002,3 +1006,28 @@ export const fridayBriefings = pgTable("friday_briefings", {
   content: text("content").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex("friday_briefings_date_idx").on(t.forDate)]);
+
+/** Partnership CRM: brands, sponsors, hospitals, donors and media F.R.I.D.A.Y. tracks for Jacob. */
+export const fridayPartners = pgTable("friday_partners", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  kind: text("kind").notNull().default("brand"), // brand | sponsor | hospital | donor | media | other
+  status: text("status").notNull().default("prospect"), // prospect | contacted | replied | committed | received | declined | dormant
+  contact: text("contact").notNull().default(""),
+  lastContactOn: date("last_contact_on"),
+  nextStep: text("next_step").notNull().default(""),
+  nextStepOn: date("next_step_on"),
+  promised: text("promised").notNull().default(""),
+  notes: text("notes").notNull().default(""),
+  source: text("source").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("friday_partners_name_idx").on(t.name)]);
+
+/** Reports she posts: inbox triage, weekly priorities. */
+export const fridayReports = pgTable("friday_reports", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  kind: text("kind").notNull(), // inbox | weekly
+  content: jsonb("content").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("friday_reports_kind_idx").on(t.kind, t.createdAt)]);
