@@ -1,5 +1,5 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, X, Loader2, Trash2, Plus, UserPlus, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,15 +13,30 @@ import {
 } from "@/server/volunteer-actions";
 import type { ActionResult } from "@/lib/action";
 
+/**
+ * Runs a server action, then refreshes the page data.
+ * `pending` covers only the action itself, not the refresh: on Next 15.5, `router.refresh()` inside a
+ * transition sometimes never commits until something else re-renders (vercel/next.js#86055, fixed in 16.3),
+ * which left buttons disabled with `useTransition`.
+ */
 function useRun() {
-  const [pending, start] = useTransition();
+  const [pending, setPending] = useState(false);
   const toast = useToast();
   const router = useRouter();
-  const run = (fn: () => Promise<ActionResult<unknown>>, after?: () => void) => start(async () => {
-    const r = await fn();
-    if (r.ok) { if (r.message) toast.push("success", r.message); after?.(); router.refresh(); }
-    else toast.push("error", r.error);
-  });
+  const run = async (fn: () => Promise<ActionResult<unknown>>, after?: () => void) => {
+    setPending(true);
+    try {
+      const r = await fn();
+      if (r.ok) { if (r.message) toast.push("success", r.message); after?.(); router.refresh(); }
+      else toast.push("error", r.error);
+      return r.ok;
+    } catch {
+      toast.push("error", "Couldn't reach the portal. Check your connection and try again.");
+      return false;
+    } finally {
+      setPending(false);
+    }
+  };
   return { pending, run };
 }
 
@@ -75,13 +90,18 @@ export function DeleteShiftButton({ shiftId, signups }: { shiftId: string; signu
 /** Admin: mark attendance. Attended creates approved hours automatically. */
 export function AttendanceToggle({ shiftId, userId, attended }: { shiftId: string; userId: string; attended: boolean | null }) {
   const { pending, run } = useRun();
+  // Shown right away after a successful save, so toggling back works even before the page data refreshes.
+  const [value, setValue] = useState(attended);
+  const [fromServer, setFromServer] = useState(attended);
+  if (attended !== fromServer) { setFromServer(attended); setValue(attended); }
+  const mark = async (next: boolean | null) => { if (await run(() => markAttendanceAction(shiftId, userId, next))) setValue(next); };
   const btn = "inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-xs font-semibold transition disabled:opacity-50";
   return (
     <div className="flex items-center gap-1">
-      <button disabled={pending} onClick={() => run(() => markAttendanceAction(shiftId, userId, attended === true ? null : true))}
-        className={cn(btn, attended === true ? "bg-ok-soft text-ok ring-1 ring-ok/30" : "text-muted hover:bg-surface-2")}><Check className="h-3.5 w-3.5" />Came</button>
-      <button disabled={pending} onClick={() => run(() => markAttendanceAction(shiftId, userId, attended === false ? null : false))}
-        className={cn(btn, attended === false ? "bg-surface-3 text-fg-2" : "text-muted hover:bg-surface-2")}><X className="h-3.5 w-3.5" />Didn't</button>
+      <button disabled={pending} aria-pressed={value === true} onClick={() => mark(value === true ? null : true)}
+        className={cn(btn, value === true ? "bg-ok-soft text-ok ring-1 ring-ok/30" : "text-muted hover:bg-surface-2")}><Check className="h-3.5 w-3.5" />Came</button>
+      <button disabled={pending} aria-pressed={value === false} onClick={() => mark(value === false ? null : false)}
+        className={cn(btn, value === false ? "bg-surface-3 text-fg-2" : "text-muted hover:bg-surface-2")}><X className="h-3.5 w-3.5" />Didn't</button>
       <button disabled={pending} aria-label="Remove from shift" onClick={() => run(() => cancelSignUpAction(shiftId, userId))} className="rounded-lg p-1.5 text-faint hover:bg-surface-2 hover:text-bad"><Trash2 className="h-3.5 w-3.5" /></button>
     </div>
   );

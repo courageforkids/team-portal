@@ -17,10 +17,13 @@ test("sign-ups respect the spot limit, and attendance turns into approved hours"
   // Admin marks attendance → 1.5 approved hours for Owen
   const admin = await as(browser, "jacob");
   await admin.page.goto(`/volunteer/events/${ev.id}`);
-  await admin.page.getByRole("listitem").filter({ hasText: "Owen" }).getByRole("button", { name: "Came", exact: true }).click();
+  const came = admin.page.getByRole("listitem").filter({ hasText: "Owen" }).getByRole("button", { name: "Came", exact: true });
+  await came.click();
+  await expect(came).toHaveAttribute("aria-pressed", "true");
   await expect.poll(async () => (await sql`select minutes, status from volunteer_hours where shift_id = ${shift.id}`)[0]).toEqual({ minutes: 90, status: "approved" });
   // Undo removes the hours again
-  await admin.page.getByRole("listitem").filter({ hasText: "Owen" }).getByRole("button", { name: "Came", exact: true }).click();
+  await came.click();
+  await expect(came).toHaveAttribute("aria-pressed", "false");
   await expect.poll(async () => (await sql`select count(*)::int as n from volunteer_hours where shift_id = ${shift.id}`)[0].n).toBe(0);
   // Non-admins don't get attendance controls
   await expect(owen.page.getByRole("button", { name: "Came", exact: true })).toHaveCount(0);
