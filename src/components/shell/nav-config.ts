@@ -1,12 +1,12 @@
 import {
   Home, CheckSquare, CalendarDays, Megaphone, FolderKanban, Users, BookOpen, LayoutDashboard, ListChecks, Inbox,
-  BarChart3, ShieldCheck, Settings, Building2, MessagesSquare, HeartHandshake, NotebookPen, Vote, PartyPopper, FileBarChart, HandCoins, FileClock, Sparkles, HandHeart, Radio, type LucideIcon,
+  BarChart3, ShieldCheck, Settings, Building2, MessagesSquare, HeartHandshake, NotebookPen, Vote, PartyPopper, FileBarChart, HandCoins, FileClock, Sparkles, HandHeart, type LucideIcon,
 } from "lucide-react";
 
 export type NavItem = { href: string; label: string; icon: LucideIcon; badgeKey?: "reviews" | "notifications" | "messages" | "hours" | "drafts" | "tasks" };
 export type NavGroups = { main: NavItem[]; admin: NavItem[] };
 
-export function navFor(role: "admin" | "leader" | "volunteer", canReview: boolean, canDonations = false, academy = false, friday = false): NavGroups {
+export function navFor(role: "admin" | "leader" | "volunteer", canReview: boolean, canDonations = false, academy = false): NavGroups {
   const main: NavItem[] = [
     { href: "/", label: "Home", icon: Home },
     { href: "/tasks", label: "My tasks", icon: CheckSquare, badgeKey: "tasks" },
@@ -24,7 +24,6 @@ export function navFor(role: "admin" | "leader" | "volunteer", canReview: boolea
   if (canDonations && role !== "admin") main.push({ href: "/donations", label: "Donations", icon: HandCoins });
   const admin: NavItem[] = [];
   if (role === "admin") {
-    if (friday) admin.push({ href: "/friday", label: "F.R.I.D.A.Y.", icon: Radio });
     admin.push(
       { href: "/admin", label: "Command center", icon: LayoutDashboard },
       { href: "/tasks/all", label: "All tasks", icon: ListChecks },

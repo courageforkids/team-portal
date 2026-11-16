@@ -33,12 +33,7 @@ export async function runMaintenance(now = new Date()) {
   const announced = await publishDueAnnouncements(now);
   const shiftReminders = await remindUpcomingShifts(now);
   const birthdays = await postBirthdays(now);
-  // F.R.I.D.A.Y.'s in-app worker only runs when a Claude API key is set; otherwise her overnight work is a Claude scheduled task.
-  let friday: unknown = null;
-  if (process.env.ANTHROPIC_API_KEY) {
-    try { friday = await (await import("./friday/worker")).workerTick(20_000); } catch (e) { console.error("friday worker failed", e); }
-  }
-  return { generated, reminders, announced, shiftReminders, birthdays, friday };
+  return { generated, reminders, announced, shiftReminders, birthdays };
 }
 
 export { nextOccurrence };

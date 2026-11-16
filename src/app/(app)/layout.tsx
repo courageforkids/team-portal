@@ -20,7 +20,6 @@ import { EffectsLayer } from "@/components/academy/effects";
 import { holidayOn } from "@/server/holiday";
 import { HolidayFx, HolidayLights } from "@/components/shell/holiday";
 import { PhotoGate } from "@/components/shell/photo-gate";
-import { getSettings as fridaySettings } from "@/server/friday/policy";
 
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -36,9 +35,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     db.select({ cape: users.cape, heroAvatar: users.heroAvatar, photoFileId: users.photoFileId }).from(users).where(eq(users.id, user.id)),
     holidayOn(user),
   ]);
-  // F.R.I.D.A.Y. shows in the menu only for her owner (or for any admin until someone claims her).
-  const fr = user.role === "admin" ? await fridaySettings().catch(() => null) : null;
-  const showFriday = !!fr && (!fr.ownerId || fr.ownerId === user.id);
   const academyOn = canSeeAcademy(user, academy);
   const canReview = user.role !== "volunteer" && isReviewer.n > 0;
   // A generated hero picture isn't a photo of them; the photo it replaced (photoFileId) is.
@@ -52,7 +48,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col border-r border-line bg-surface md:flex">
         <div className="flex h-16 items-center px-4"><Brand orgName={s.orgName} /></div>
-        <div className="scrollbar-thin flex-1 overflow-y-auto px-3 py-3"><NavList role={user.role} canReview={canReview} canDonations={canDonations} academy={academyOn} friday={showFriday} badges={badges} /></div>
+        <div className="scrollbar-thin flex-1 overflow-y-auto px-3 py-3"><NavList role={user.role} canReview={canReview} canDonations={canDonations} academy={academyOn} badges={badges} /></div>
         <div className="border-t border-line p-3"><UserMenu name={user.name} title={user.title} avatarFileId={user.avatarFileId} /></div>
       </aside>
 
@@ -70,7 +66,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <main id="main" className="mx-auto w-full max-w-[1240px] px-4 pt-6 pb-28 md:px-8 md:pt-8 md:pb-12"><PageTransition>{children}</PageTransition></main>
         <AppGestures holiday={holiday} />
       </div>
-      <MobileNav role={user.role} canReview={canReview} canDonations={canDonations} academy={academyOn} friday={showFriday} badges={badges} orgName={s.orgName} />
+      <MobileNav role={user.role} canReview={canReview} canDonations={canDonations} academy={academyOn} badges={badges} orgName={s.orgName} />
       {academyOn && <EffectsLayer />}
       {academyOn && <AcademyLive userId={user.id} />}
       {!hasPhoto && <PhotoGate name={user.name} fileId={meRow?.heroAvatar ? null : user.avatarFileId} />}
