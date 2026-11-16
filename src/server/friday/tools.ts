@@ -8,7 +8,8 @@ import { resolvePeople, parseWhen } from "@/server/api-helpers";
 import { createAnnouncementFromApi } from "@/server/v1-creators";
 import { notify } from "@/server/notify";
 import { getSettings as portalSettings } from "@/server/settings";
-import { promises } from "@/db/schema";
+import { promises, fridayPartners as partners, fridaySettings } from "@/db/schema";
+import { localParts } from "@/lib/friday-pure";
 import { and, desc, eq, gte, ilike, isNull, or } from "drizzle-orm";
 import { db } from "@/db";
 import { fridayEvents as events, fridayJobs as jobs, fridayMemories as memories } from "@/db/schema";
@@ -32,6 +33,8 @@ const tool = <S extends z.ZodType>(d: ToolDef<S>) => d as unknown as AnyTool;
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
 const short = (t: string, n = 300) => (t.length > n ? `${t.slice(0, n)}…` : t);
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD");
+const PSTATUS = ["prospect", "contacted", "replied", "committed", "received", "declined", "dormant"] as const;
+const PKIND = ["brand", "sponsor", "hospital", "donor", "media", "other"] as const;
 const KINDS = ["fact", "preference", "decision", "deadline", "partner", "note"] as const;
 const when = (d: Date | null | undefined, tz: string) => d ? d.toLocaleString("en-US", { timeZone: tz, weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : null;
 
@@ -109,6 +112,59 @@ export const TOOLS: AnyTool[] = [
     run: async (_c, i) => {
       const rows = await db.select().from(events).where(gte(events.createdAt, new Date(Date.now() - i.hours * 36e5))).orderBy(desc(events.createdAt)).limit(200);
       return rows.map((e) => ({ at: e.createdAt.toISOString(), kind: e.kind, tool: e.tool, ok: e.ok, detail: e.detail }));
+    },
+  }),
+
+  // ───────── Level 1: partnership tracker ─────────
+  tool({
+    name: "list_partners",
+    description: "Partnership tracker (brands, sponsors, hospitals, donors, media): status, last contact, next step, what was promised. Filter by status, kind or a word.",
+    level: 1,
+    schema: z.object({ status: z.enum(PSTATUS).optional(), kind: z.enum(PKIND).optional(), q: z.string().max(80).optional() }),
+    run: async (_c, i) => (await db.select().from(partners).where(and(
+      i.status ? eq(partners.status, i.status) : undefined, i.kind ? eq(partners.kind, i.kind) : undefined,
+      i.q ? or(ilike(partners.name, `%${i.q}%`), ilike(partners.notes, `%${i.q}%`)) : undefined,
+    )).orderBy(desc(partners.updatedAt)).limit(60)).map((p) => ({ id: p.id, name: p.name, kind: p.kind, status: p.status, contact: p.contact, lastContact: p.lastContactOn, nextStep: p.nextStep, nextStepOn: p.nextStepOn, promised: p.promised, notes: short(p.notes, 400) })),
+  }),
+  tool({
+    name: "upsert_partner",
+    description: "Add or update a partner in the tracker (matched by name). Record only facts you saw (an email, a portal record, or Jacob). Give a source.",
+    level: 1,
+    schema: z.object({
+      name: z.string().min(2).max(120), kind: z.enum(PKIND).optional(), status: z.enum(PSTATUS).optional(), contact: z.string().max(200).optional(),
+      last_contact_on: DATE.optional(), next_step: z.string().max(300).optional(), next_step_on: DATE.optional(), promised: z.string().max(500).optional(),
+      notes: z.string().max(2000).optional(), source: z.string().min(2).max(200),
+    }),
+    run: async (_c, i) => {
+      const [cur] = await db.select().from(partners).where(ilike(partners.name, i.name)).limit(1);
+      const v = {
+        kind: i.kind ?? cur?.kind ?? "brand", status: i.status ?? cur?.status ?? "prospect", contact: i.contact ?? cur?.contact ?? "",
+        lastContactOn: i.last_contact_on ?? cur?.lastContactOn ?? null, nextStep: i.next_step ?? cur?.nextStep ?? "", nextStepOn: i.next_step_on ?? cur?.nextStepOn ?? null,
+        promised: i.promised ?? cur?.promised ?? "", notes: i.notes ? (cur?.notes ? `${cur.notes}\n${i.notes}` : i.notes).slice(-4000) : cur?.notes ?? "", source: i.source, updatedAt: new Date(),
+      };
+      if (cur) { await db.update(partners).set(v).where(eq(partners.id, cur.id)); return { updated: true, id: cur.id }; }
+      const [p] = await db.insert(partners).values({ name: i.name, ...v }).returning({ id: partners.id });
+      return { created: true, id: p.id };
+    },
+  }),
+  tool({
+    name: "alert_jacob",
+    description: "Send Jacob a phone/portal notification. Only for things he must know soon. During his quiet hours it is held for the morning briefing unless urgent=true (a real emergency or a same-day deadline). At most 5 a day.",
+    level: 1,
+    schema: z.object({ title: z.string().min(3).max(80), message: z.string().min(3).max(300), urgent: z.boolean() }),
+    run: async ({ owner }, i) => {
+      const [s] = await db.select().from(fridaySettings).where(eq(fridaySettings.id, 1));
+      const { hour } = localParts(owner.timezone);
+      const quiet = s ? (s.quietStart > s.quietEnd ? hour >= s.quietStart || hour < s.quietEnd : hour >= s.quietStart && hour < s.quietEnd) : false;
+      const today = await db.select({ id: events.id }).from(events).where(and(eq(events.kind, "alert"), gte(events.createdAt, new Date(Date.now() - 864e5))));
+      if (today.length >= 5) return { sent: false, reason: "Daily alert limit reached. Put it in the briefing instead." };
+      if (quiet && !i.urgent) {
+        await db.insert(events).values({ kind: "alert_held", tool: "alert_jacob", ok: true, detail: { title: i.title, message: i.message } });
+        return { sent: false, held: true, reason: "Quiet hours: held for the morning briefing." };
+      }
+      await notify([owner.id], { type: "friday", title: `F.R.I.D.A.Y.: ${i.title}`, body: i.message, href: "/friday" });
+      await db.insert(events).values({ kind: "alert", tool: "alert_jacob", ok: true, detail: { title: i.title, urgent: i.urgent } });
+      return { sent: true };
     },
   }),
 
