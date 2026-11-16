@@ -1,7 +1,9 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { fridayActions, fridayBriefings, fridayJobs, fridayMessages } from "@/db/schema";
+import { events as calendar, fridayActions, fridayBriefings, fridayEvents, fridayJobs, fridayMemories, fridayMessages, fridayPartners, fridaySettings } from "@/db/schema";
+import { cashBetween, yearTotals } from "@/server/donations";
+import { getPeople } from "@/server/queries";
 import { actionFridayOwner } from "@/server/friday/access";
 import { aiConfigured, logEvent, runAgent, type AgentMessage } from "@/server/friday/agent";
 import { nowLine } from "@/server/friday/worker";
@@ -13,26 +15,81 @@ export const dynamic = "force-dynamic";
 
 const Body = z.object({ text: z.string().trim().min(1).max(4000), channel: z.enum(["text", "voice"]).default("text") });
 
-/** Without an API key Friday can't hold a conversation, but she can still read out real information. */
-async function limitedReply(me: CurrentUser, text: string): Promise<string> {
+/** Without an API key Friday can't hold a conversation, but she answers from real data and queues bigger requests for her next scheduled run. */
+async function limitedReply(me: CurrentUser, raw: string): Promise<string> {
+  const text = raw.replace(/^\s*(hey\s+|ok(ay)?\s+)?fri(day|dae)[\s,.!?]*/i, "").trim();
   const t = text.toLowerCase();
-  if (/good morning|briefing|morning report|what did you do/.test(t)) {
+  const first = (n: string) => n.split(" ")[0];
+  const todayLocal = new Intl.DateTimeFormat("en-CA", { timeZone: me.timezone }).format(new Date());
+  if (!t || /^(hi|hello|hey|yo|you there|are you there)\b/.test(t)) return "At your service, sir. Ask for your briefing, approvals, what's overdue, fundraising, this week's calendar, the team, or partnerships, or give me something to work on.";
+  if (/good morning|briefing|morning report/.test(t)) {
     const [b] = await db.select().from(fridayBriefings).orderBy(desc(fridayBriefings.forDate)).limit(1);
     if (!b) return "Good morning, sir. I don't have a briefing yet. My first one arrives after my overnight run.";
-    const today = new Intl.DateTimeFormat("en-CA", { timeZone: me.timezone }).format(new Date());
-    return b.forDate === today ? b.content : `My latest briefing is from ${b.forDate}. ${b.content}`;
+    return b.forDate === todayLocal ? b.content : `My latest briefing is from ${b.forDate}. ${b.content}`;
   }
-  if (/approv|pending|waiting|decision/.test(t)) {
+  if (/^(pause|stop everything|emergency stop|stand down|halt)\b/.test(t)) {
+    await db.update(fridaySettings).set({ paused: true, updatedAt: new Date() }).where(eq(fridaySettings.id, 1));
+    await logEvent(null, "security", "emergency_stop", true, { paused: true, via: "voice or chat" });
+    return "Understood. I've stopped everything. Nothing will run until you press Resume in System Status.";
+  }
+  if (/^(remember|note|make a note)( that)?\b/.test(t)) {
+    const content = text.replace(/^(remember|note|make a note)( that)?\s*/i, "").trim();
+    if (content.length < 3) return "What should I remember, sir?";
+    await db.insert(fridayMemories).values({ kind: "note", title: content.slice(0, 80), content, source: "Jacob told me", verified: true });
+    return "Noted, sir. It's in my memory.";
+  }
+  // Requests to do work go straight to her queue, even if they mention a topic like fundraising.
+  if (/^(please\s+|can you\s+|could you\s+|i need you to\s+)?(prepare|draft|write|research|find|create|plan|make|build|organi[sz]e|look into|figure out|work on|handle|take care|reach out|follow up|put together|come up with|help me|go through|clean up|update|review|summari[sz]e|check on)\b/.test(t)) {
+    await db.insert(fridayJobs).values({ kind: "objective", title: text.slice(0, 120), instructions: text });
+    await logEvent(null, "job", null, true, { title: text.slice(0, 120), outcome: "queued from chat" });
+    return "On it, sir. I've added that to my work queue. I'll pick it up on my next run, within the hour during the day or overnight, and you'll find the results under Autonomous Agents, with anything that needs your sign-off in the Approval Center.";
+  }
+  if (/approv|pending|waiting for me|decision/.test(t)) {
     const rows = await db.select({ summary: fridayActions.summary }).from(fridayActions).where(eq(fridayActions.status, "pending"));
     if (!rows.length) return "Nothing is waiting for your approval, sir.";
     return `${rows.length === 1 ? "One item is" : `${rows.length} items are`} waiting for your approval: ${rows.slice(0, 5).map((r) => r.summary).join("; ")}. You can approve them in the Approval Center.`;
   }
-  if (/overdue|late|behind|deadline|task/.test(t)) {
+  if (/fundrais|donation|raised|money|gifts?\b/.test(t)) {
+    const now = new Date(), ymd = (d: Date) => d.toISOString().slice(0, 10);
+    const m0 = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)), m1 = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)), mp = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+    const [a, b, y] = await Promise.all([cashBetween(ymd(m0), ymd(m1)), cashBetween(ymd(mp), ymd(m0)), yearTotals(now.getUTCFullYear())]);
+    const usd = (c: number) => `$${(c / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+    return `From gifts logged in the portal: ${usd(a.cents)} in cash this month from ${a.count} gift${a.count === 1 ? "" : "s"}, compared with ${usd(b.cents)} last month. This year: ${usd(y.cashCents)} in cash and ${y.inKind} in-kind gift${y.inKind === 1 ? "" : "s"} from ${y.donors} donor${y.donors === 1 ? "" : "s"}.`;
+  }
+  if (/calendar|schedule|this week|events?\b|what's coming|upcoming/.test(t)) {
+    const rows = await db.select({ title: calendar.title, startsAt: calendar.startsAt }).from(calendar).where(and(gte(calendar.startsAt, new Date()), lte(calendar.startsAt, new Date(Date.now() + 7 * 864e5)))).orderBy(asc(calendar.startsAt)).limit(8);
+    if (!rows.length) return "Nothing is on the portal calendar for the next seven days.";
+    return `Coming up this week: ${rows.map((r) => `${r.title} on ${r.startsAt.toLocaleString("en-US", { timeZone: me.timezone, weekday: "long", hour: "numeric", minute: "2-digit" })}`).join("; ")}.`;
+  }
+  if (/overdue|late|behind|deadline|tasks?\b/.test(t)) {
     const rows = await loadTasks(me, { scope: "all", view: "overdue", limit: 10 });
     if (!rows.length) return "Nothing is overdue in the portal right now.";
-    return `${rows.length} task${rows.length === 1 ? " is" : "s are"} overdue: ${rows.slice(0, 4).map((r) => `${r.title}${r.assignees.length ? ` (${r.assignees.map((a) => a.name.split(" ")[0]).join(", ")})` : ""}`).join("; ")}.`;
+    return `${rows.length} task${rows.length === 1 ? " is" : "s are"} overdue: ${rows.slice(0, 4).map((r) => `${r.title}${r.assignees.length ? ` (${r.assignees.map((a) => first(a.name)).join(", ")})` : ""}`).join("; ")}.`;
   }
-  return "I'm in limited mode, sir: live conversation needs a Claude API key. I can read you this morning's briefing, what's waiting for your approval, or what's overdue. My overnight work still runs.";
+  if (/partner|sponsor|brands?\b|pipeline/.test(t)) {
+    const rows = await db.select().from(fridayPartners);
+    if (!rows.length) return "The partnership tracker is empty so far.";
+    const by = (st: string) => rows.filter((r) => r.status === st).length;
+    const due = rows.filter((r) => r.nextStepOn && r.nextStepOn <= todayLocal);
+    return `I'm tracking ${rows.length} partners: ${by("committed")} committed, ${by("received")} delivered, ${by("replied")} replied, ${by("contacted")} waiting on a reply.${due.length ? ` Follow-ups due: ${due.slice(0, 4).map((r) => `${r.name}, ${r.nextStep}`).join("; ")}.` : ""}`;
+  }
+  if (/\bteam\b|who's on|members/.test(t)) {
+    const people = await getPeople();
+    return `The active team is ${people.map((p) => first(p.name)).join(", ")}.`;
+  }
+  if (/what did you do|activity|last night|overnight/.test(t)) {
+    const rows = await db.select({ kind: fridayEvents.kind, ok: fridayEvents.ok }).from(fridayEvents).where(gte(fridayEvents.createdAt, new Date(Date.now() - 864e5)));
+    if (!rows.length) return "My log is empty for the last 24 hours.";
+    const n = (k: string) => rows.filter((r) => r.kind === k).length;
+    return `In the last 24 hours I ran ${n("tool")} actions, queued ${n("approval_requested")} for your approval, finished ${n("job")} jobs and posted ${n("report")} reports. ${rows.filter((r) => !r.ok).length} things failed. The details are under Autonomous Agents.`;
+  }
+  // Anything else that sounds like work goes to the queue for her next scheduled run.
+  if (text.split(/\s+/).length >= 3) {
+    await db.insert(fridayJobs).values({ kind: "objective", title: text.slice(0, 120), instructions: text });
+    await logEvent(null, "job", null, true, { title: text.slice(0, 120), outcome: "queued from chat" });
+    return "On it, sir. I've added that to my work queue. I'll pick it up on my next run, within the hour during the day or overnight, and you'll find the results under Autonomous Agents, with anything that needs your sign-off in the Approval Center.";
+  }
+  return "I didn't catch that, sir. Try asking for your briefing, approvals, fundraising, the calendar, overdue tasks, partnerships, or give me something to work on.";
 }
 
 /** One conversational turn. Voice and text share the same history. */

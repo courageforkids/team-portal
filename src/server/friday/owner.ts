@@ -1,9 +1,10 @@
 import "server-only";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { fridaySettings, users } from "@/db/schema";
 import type { CurrentUser } from "@/server/auth";
 import { getSettings } from "./policy";
+import { seedOrgKnowledge } from "./seed";
 
 /** The admin F.R.I.D.A.Y. works for, or null if nobody has claimed her yet (or that person is no longer an active admin). */
 export async function fridayOwner(): Promise<CurrentUser | null> {
@@ -23,6 +24,8 @@ export async function claimOrCheck(me: CurrentUser): Promise<boolean> {
   const s = await getSettings();
   if (s.ownerId === me.id) return true;
   if (s.ownerId) return false;
-  const r = await db.update(fridaySettings).set({ ownerId: me.id }).where(eq(fridaySettings.id, 1)).returning({ ownerId: fridaySettings.ownerId });
-  return r[0]?.ownerId === me.id;
+  const r = await db.update(fridaySettings).set({ ownerId: me.id }).where(and(eq(fridaySettings.id, 1), isNull(fridaySettings.ownerId))).returning({ ownerId: fridaySettings.ownerId });
+  if (r[0]?.ownerId !== me.id) return false;
+  await seedOrgKnowledge();
+  return true;
 }
