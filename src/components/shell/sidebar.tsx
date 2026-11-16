@@ -46,10 +46,10 @@ export function Brand({ orgName }: { orgName: string }) {
   );
 }
 
-export function NavList({ role, canReview, canDonations = false, academy = false, badges, onNavigate }: { role: "admin" | "leader" | "volunteer"; canReview: boolean; canDonations?: boolean; academy?: boolean; badges: Record<string, number>; onNavigate?: () => void }) {
+export function NavList({ role, canReview, canDonations = false, academy = false, friday = false, badges, onNavigate }: { role: "admin" | "leader" | "volunteer"; canReview: boolean; canDonations?: boolean; academy?: boolean; friday?: boolean; badges: Record<string, number>; onNavigate?: () => void }) {
   const live = useBadges();
   if (Object.keys(live).length) badges = live;
-  const groups: NavGroups = navFor(role, canReview, canDonations, academy);
+  const groups: NavGroups = navFor(role, canReview, canDonations, academy, friday);
   return (
     <nav aria-label="Main" className="flex flex-col gap-6">
       <div className="flex flex-col gap-0.5">{groups.main.map((i) => <NavLink key={i.href} item={i} badges={badges} onNavigate={onNavigate} />)}</div>

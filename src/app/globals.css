@@ -215,3 +215,26 @@ html:not(.dark) .cfk-snow-page { filter: drop-shadow(0 0 1.5px rgba(0,79,129,.55
 .dark:has([data-holiday]) { --surface: #111c2b; --surface-2: #16243a; --surface-3: #1d2e48; --line: #22344d; --line-strong: #2d4566; --brand-soft: #142c45; }
 .dark:has([data-holiday]) body { background-image: radial-gradient(1.2px 1.2px at 12% 18%, rgba(255,255,255,.55), transparent), radial-gradient(1px 1px at 68% 8%, rgba(255,255,255,.45), transparent), radial-gradient(1.4px 1.4px at 85% 42%, rgba(254,212,56,.5), transparent), radial-gradient(1px 1px at 33% 64%, rgba(255,255,255,.35), transparent), radial-gradient(1.2px 1.2px at 52% 88%, rgba(255,255,255,.4), transparent), linear-gradient(180deg, #0d1117 0%, #0b1626 100%); background-attachment: fixed; background-size: 420px 420px, 380px 380px, 520px 520px, 300px 300px, 460px 460px, 100% 100%; }
 @media (prefers-reduced-motion: reduce) { .cfk-bulb, .cfk-snow-page { animation: none !important; } }
+
+/* ───────── F.R.I.D.A.Y. (her own dark look, only inside .friday) ───────── */
+@theme {
+  --color-fr-void: #020a16; --color-fr-deep: #04142a; --color-fr-panel: #071c38; --color-fr-panel-2: #0a2547; --color-fr-line: #12345e;
+  --color-fr-navy: #004f81; --color-fr-arc: #38bdf8; --color-fr-arc-2: #7dd3fc; --color-fr-gold: #fed438;
+  --color-fr-fg: #e6f1ff; --color-fr-muted: #8aa4c4; --color-fr-ok: #34d399; --color-fr-warn: #fbbf24; --color-fr-bad: #f87171;
+}
+.friday { color-scheme: dark; min-height: 100dvh; color: var(--color-fr-fg); background-color: var(--color-fr-void);
+  background-image: radial-gradient(1200px 600px at 70% -10%, rgba(56,189,248,.10), transparent 60%), radial-gradient(900px 500px at -10% 110%, rgba(0,79,129,.35), transparent 60%); background-attachment: fixed; }
+.friday .fr-panel { background: color-mix(in oklab, var(--color-fr-panel) 80%, transparent); border: 1px solid var(--color-fr-line); border-radius: 18px; backdrop-filter: blur(10px); }
+.friday .fr-eyebrow { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--color-fr-arc); }
+.friday .fr-input { width: 100%; border-radius: 12px; border: 1px solid var(--color-fr-line); background: var(--color-fr-deep); padding: 10px 12px; color: var(--color-fr-fg); outline: none; }
+.friday .fr-input:focus { border-color: var(--color-fr-arc); box-shadow: 0 0 0 3px rgba(56,189,248,.2); }
+.friday .fr-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; border-radius: 12px; padding: 0 14px; font-size: 14px; font-weight: 600; transition: all .15s; }
+.friday .fr-btn-primary { background: var(--color-fr-arc); color: #021020; }
+.friday .fr-btn-primary:hover { background: var(--color-fr-arc-2); }
+.friday .fr-btn-ghost { border: 1px solid var(--color-fr-line); color: var(--color-fr-fg); }
+.friday .fr-btn-ghost:hover { border-color: var(--color-fr-arc); }
+.friday .fr-btn-danger { background: #7f1d1d; color: #fee2e2; border: 1px solid #b91c1c; }
+.friday .fr-btn-gold { background: var(--color-fr-gold); color: #1a1300; }
+.friday .fr-btn:disabled { opacity: .5; cursor: not-allowed; }
+.friday .fr-btn:focus-visible, .friday a:focus-visible { outline: 2px solid var(--color-fr-arc); outline-offset: 2px; }
+.friday .fr-dot { width: 8px; height: 8px; border-radius: 999px; display: inline-block; }

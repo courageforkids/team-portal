@@ -141,6 +141,13 @@
       "when": 1794784778749,
       "tag": "0019_sponsor_promises",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1794788078247,
+      "tag": "0020_friday",
+      "breakpoints": true
     }
   ]
 }
