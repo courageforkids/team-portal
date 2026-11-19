@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Playfair_Display, Plus_Jakarta_Sans } from "next/font/google";
 import { ToastProvider } from "@/components/ui/toaster";
 import { ViewportFix } from "@/components/shell/viewport-fix";
 import "./globals.css";
 
 const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-jakarta", display: "swap" });
+const playfair = Playfair_Display({ subsets: ["latin"], variable: "--font-playfair", display: "swap", weight: ["600", "700"], style: ["normal", "italic"] });
 
 export const metadata: Metadata = {
   title: { default: "Courage for Kids | Team Portal", template: "%s · Courage for Kids" },
@@ -27,7 +28,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // The phone's top bar color comes from the first HTML it sees, so it's set here from the saved theme (cookie).
   const t = (await cookies()).get("cfk-theme")?.value;
   return (
-    <html lang="en" className={jakarta.variable + (t === "dark" ? " dark" : "")} suppressHydrationWarning>
+    <html lang="en" className={jakarta.variable + " " + playfair.variable + (t === "dark" ? " dark" : "")} suppressHydrationWarning>
       <head>
         {t === "system"
           ? <><meta name="theme-color" media="(prefers-color-scheme: light)" content={LIGHT} /><meta name="theme-color" media="(prefers-color-scheme: dark)" content={DARK} /></>

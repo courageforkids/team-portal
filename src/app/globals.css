@@ -34,6 +34,12 @@
   --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 2px 8px rgba(16, 24, 40, 0.05);
   --shadow-lg: 0 12px 32px rgba(16, 24, 40, 0.12), 0 2px 6px rgba(16, 24, 40, 0.06);
+
+  /* Courage HQ: warm paper + pastel cards */
+  --hq-paper: #f3eee5; --hq-card: #fbf8f2; --hq-line: #e3dacb; --hq-ink: #1d2733; --hq-muted: #776f63;
+  --hq-banner: #0f3a57; --hq-banner-fg: #f7f1e4;
+  --hq-pink: #f5dbd7; --hq-pink-2: #eab8b2; --hq-sage: #dce6d3; --hq-sage-2: #b9cdab;
+  --hq-sand: #efe3cf; --hq-sand-2: #dcc6a2; --hq-butter: #fcedb3; --hq-butter-2: #f4d361;
   color-scheme: light;
 }
 
@@ -68,6 +74,11 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.25);
   --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
+
+  --hq-paper: #14181e; --hq-card: #1b2129; --hq-line: #2b333e; --hq-ink: #ede6d8; --hq-muted: #a3998b;
+  --hq-banner: #0d2d44; --hq-banner-fg: #f2ecdf;
+  --hq-pink: #36282a; --hq-pink-2: #573a3c; --hq-sage: #242d26; --hq-sage-2: #3a4a35;
+  --hq-sand: #2d281f; --hq-sand-2: #4a3f2c; --hq-butter: #332d16; --hq-butter-2: #5c4f1c;
   color-scheme: dark;
 }
 
@@ -100,6 +111,22 @@
   --color-violet-soft: var(--violet-soft);
   --color-info: var(--info);
   --color-info-soft: var(--info-soft);
+  --color-hq-paper: var(--hq-paper);
+  --color-hq-card: var(--hq-card);
+  --color-hq-line: var(--hq-line);
+  --color-hq-ink: var(--hq-ink);
+  --color-hq-muted: var(--hq-muted);
+  --color-hq-banner: var(--hq-banner);
+  --color-hq-banner-fg: var(--hq-banner-fg);
+  --color-hq-pink: var(--hq-pink);
+  --color-hq-pink-2: var(--hq-pink-2);
+  --color-hq-sage: var(--hq-sage);
+  --color-hq-sage-2: var(--hq-sage-2);
+  --color-hq-sand: var(--hq-sand);
+  --color-hq-sand-2: var(--hq-sand-2);
+  --color-hq-butter: var(--hq-butter);
+  --color-hq-butter-2: var(--hq-butter-2);
+  --font-display: var(--font-playfair), Georgia, "Times New Roman", serif;
   --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --shadow-card: var(--shadow);
   --shadow-soft: var(--shadow-sm);

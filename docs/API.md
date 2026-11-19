@@ -31,6 +31,7 @@ For trusted automation (e.g. Claude) acting on behalf of an Executive Administra
 | GET/POST | `/api/v1/meetings` | `{ title, startsAt, agenda?, visibility? }` or `{ event: "<calendar event id>", agenda? }` (reuses that event's meeting page) |
 | GET/POST | `/api/v1/polls` | `{ question, options: ["A","B"], description?, closesAt?, roles?: ["leader"], multiple?, anonymous?, showResults?: always\|after_vote\|after_close }`. Notifies the audience. |
 | GET/POST | `/api/v1/donations` | `{ donor: "Smith Family", receivedOn?: "2026-11-07", type?: cash\|in_kind\|other, amount?: 50, method?: "Check", description?, goodsReceived?: "2 tickets", goodsValue?: 20 }`. Creates the donor if new and returns the receipt number and link. GET `?year=2026` lists gifts and totals. Private: never share amounts outside the portal. |
+| GET/POST | `/api/v1/hq` | The key owner's private Courage HQ. POST `{ items: [{ externalId?, kind: task\|grant\|gift\|contact, title, subtitle?, category?, date?: "2026-12-01", amount?, nextStep?, person?, link?, notes?, extra?: {…}, done? }] }`. Items with an `externalId` are upserted, so re-sending is safe. Meanings per kind are in `src/lib/hq.ts`. |
 | GET/POST | `/api/v1/resources` | `{ title, kind?: note\|link, body? (note), url? (link), category?, description?, visibility?, pinned? }` |
 
 Example:

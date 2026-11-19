@@ -901,3 +901,35 @@ export const promises = pgTable("promises", {
   doneAt: timestamp("done_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("promises_owner_idx").on(t.ownerId)]);
+
+/* ───────────── Courage HQ (private to the admin who owns it) ───────────── */
+
+export const hqKindEnum = pgEnum("hq_kind", ["task", "grant", "gift", "contact"]);
+
+/**
+ * The executive director's own command board: tasks, grants, gifts and people to follow up with.
+ * One row per item; `title`/`subtitle`/`category`/`date` mean different things per kind (see src/lib/hq.ts).
+ */
+export const hqItems = pgTable("hq_items", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  kind: hqKindEnum("kind").notNull(),
+  title: text("title").notNull(),
+  subtitle: text("subtitle").notNull().default(""),
+  category: text("category").notNull().default(""),
+  date: date("date"),
+  amountCents: integer("amount_cents"),
+  nextStep: text("next_step").notNull().default(""),
+  person: text("person").notNull().default(""),
+  link: text("link").notNull().default(""),
+  notes: text("notes").notNull().default(""),
+  extra: jsonb("extra").$type<Record<string, string | boolean | null>>().notNull().default({}),
+  doneAt: timestamp("done_at", { withTimezone: true }),
+  externalId: text("external_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("hq_items_owner_kind_idx").on(t.ownerId, t.kind),
+  uniqueIndex("hq_items_owner_external_idx").on(t.ownerId, t.externalId),
+]);
+export type HqItem = typeof hqItems.$inferSelect;

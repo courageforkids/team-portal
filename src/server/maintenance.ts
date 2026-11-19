@@ -11,6 +11,7 @@ import { appUrl } from "./email";
 import { adminIds, notify } from "./notify";
 import { createTasks } from "./tasks";
 import { audienceMatches } from "./policy";
+import { sendHqReminders } from "./hq";
 import { OPEN_FOR_ASSIGNEE } from "@/lib/task-meta";
 import { fmtDateTime } from "@/lib/dates";
 
@@ -33,7 +34,8 @@ export async function runMaintenance(now = new Date()) {
   const announced = await publishDueAnnouncements(now);
   const shiftReminders = await remindUpcomingShifts(now);
   const birthdays = await postBirthdays(now);
-  return { generated, reminders, announced, shiftReminders, birthdays };
+  const hq = await sendHqReminders(now);
+  return { generated, reminders, announced, shiftReminders, birthdays, hq };
 }
 
 export { nextOccurrence };
