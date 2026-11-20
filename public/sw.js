@@ -1,5 +1,5 @@
 /* Courage for Kids Team Portal — service worker for phone notifications. */
-const PAGES = "cfk-pages-v1", ASSETS = "cfk-assets-v1", DATA = "cfk-data-v1";
+const PAGES = "cfk-pages-v1" /* sw v2: instant launch */, ASSETS = "cfk-assets-v1", DATA = "cfk-data-v1";
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil((async () => {
   const keep = [PAGES, ASSETS, DATA];
@@ -29,13 +29,21 @@ async function networkFirst(req, cacheName) {
 /* App launch: show the last saved copy of the page instantly (no blank screen while the server and database wake up),
    fetch a fresh copy in the background, and let the page refresh itself (see FreshOnLaunch). First visit: network as usual. */
 async function launchFast(event, req) {
+  // Only when the app is starting up (no portal window open yet). Inside a running app, load fresh as usual.
+  const open = (await self.clients.matchAll({ type: "window" })).filter((c) => c.id !== event.resultingClientId);
+  if (open.length) return networkFirst(req, PAGES);
   const cache = await caches.open(PAGES);
   const hit = await cache.match(req, { ignoreVary: true });
   const fresh = fetch(req).then((res) => {
     if (res.ok && res.type === "basic" && !res.redirected) cache.put(req, res.clone());
     return res;
   });
-  if (hit) { event.waitUntil(fresh.catch(() => {})); return hit; }
+  if (hit) {
+    event.waitUntil(fresh.catch(() => {}));
+    // Mark the saved copy so the page knows to fetch fresh data once it's showing (FreshOnLaunch).
+    const html = (await hit.text()).replace("<head>", '<head><meta name="cfk-from-cache" content="1">');
+    return new Response(html, { status: hit.status, headers: hit.headers });
+  }
   return fresh.catch(() => networkFirst(req, PAGES));
 }
 async function cacheFirst(req) {

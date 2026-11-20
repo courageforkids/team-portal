@@ -3,15 +3,14 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 /**
- * The app opens instantly from the last saved copy of the page (see public/sw.js). If this copy was rendered
- * more than a couple of seconds ago, quietly fetch the latest data so it updates in place.
+ * On a cold app launch the service worker shows the last saved copy of the page instantly (see public/sw.js)
+ * and tags it with <meta name="cfk-from-cache">. When this page is that saved copy, fetch the latest data
+ * so it updates in place.
  */
-export function FreshOnLaunch({ renderedAt }: { renderedAt: number }) {
+export function FreshOnLaunch() {
   const router = useRouter();
   useEffect(() => {
-    if (Date.now() - renderedAt > 2_000) router.refresh();
-    // Only on first load of this document.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (document.querySelector('meta[name="cfk-from-cache"]')) router.refresh();
+  }, [router]);
   return null;
 }

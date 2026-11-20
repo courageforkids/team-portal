@@ -45,7 +45,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <BadgesProvider initial={badges}>
     <div className="min-h-dvh" data-holiday={holiday ? "1" : undefined}>
-      <FreshOnLaunch renderedAt={Date.now()} />
+      <FreshOnLaunch />
       {holiday && <HolidayFx />}
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[70] focus:rounded-lg focus:bg-surface focus:px-3 focus:py-2 focus:shadow-pop">Skip to content</a>
       {/* Desktop sidebar */}
