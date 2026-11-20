@@ -1,4 +1,5 @@
 import { canManageDonations } from "@/server/donations";
+import { after } from "next/server";
 import { count, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { tasks } from "@/db/schema";
@@ -20,12 +21,13 @@ import { EffectsLayer } from "@/components/academy/effects";
 import { holidayOn } from "@/server/holiday";
 import { HolidayFx, HolidayLights } from "@/components/shell/holiday";
 import { PhotoGate } from "@/components/shell/photo-gate";
+import { FreshOnLaunch } from "@/components/shell/fresh-on-launch";
 
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
-  // Usually a no-op: the 5-minute heartbeat runs reminders and cleanup, so page loads rarely wait on it.
-  await runMaintenanceIfDue();
+  // Reminders and cleanup run after the page is sent, so nobody waits on them.
+  after(runMaintenanceIfDue);
   const [s, [isReviewer], canDonations, badges, academy, [meRow], holiday] = await Promise.all([
     getSettings(),
     user.role === "admin" ? Promise.resolve([{ n: 1 }]) : db.select({ n: count() }).from(tasks).where(eq(tasks.reviewerId, user.id)),
@@ -43,6 +45,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <BadgesProvider initial={badges}>
     <div className="min-h-dvh" data-holiday={holiday ? "1" : undefined}>
+      <FreshOnLaunch renderedAt={Date.now()} />
       {holiday && <HolidayFx />}
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[70] focus:rounded-lg focus:bg-surface focus:px-3 focus:py-2 focus:shadow-pop">Skip to content</a>
       {/* Desktop sidebar */}

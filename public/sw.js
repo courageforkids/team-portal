@@ -26,6 +26,18 @@ async function networkFirst(req, cacheName) {
     throw e;
   }
 }
+/* App launch: show the last saved copy of the page instantly (no blank screen while the server and database wake up),
+   fetch a fresh copy in the background, and let the page refresh itself (see FreshOnLaunch). First visit: network as usual. */
+async function launchFast(event, req) {
+  const cache = await caches.open(PAGES);
+  const hit = await cache.match(req, { ignoreVary: true });
+  const fresh = fetch(req).then((res) => {
+    if (res.ok && res.type === "basic" && !res.redirected) cache.put(req, res.clone());
+    return res;
+  });
+  if (hit) { event.waitUntil(fresh.catch(() => {})); return hit; }
+  return fresh.catch(() => networkFirst(req, PAGES));
+}
 async function cacheFirst(req) {
   const cache = await caches.open(ASSETS);
   const hit = await cache.match(req);
@@ -43,7 +55,7 @@ self.addEventListener("fetch", (event) => {
   if (p.startsWith("/login") || p.startsWith("/invite") || p.startsWith("/reset-password") || p.startsWith("/forgot-password") || p.startsWith("/api/v1") || p.startsWith("/api/health") || p.startsWith("/launch")) return;
   if (req.headers.get("RSC") || url.searchParams.has("_rsc")) { event.respondWith(networkFirst(req, PAGES)); return; }
   if (p.startsWith("/_next/static/") || /\.(png|svg|ico|woff2?)$/.test(p)) { event.respondWith(cacheFirst(req)); return; }
-  if (req.mode === "navigate") { event.respondWith(networkFirst(req, PAGES)); return; }
+  if (req.mode === "navigate") { event.respondWith(launchFast(event, req)); return; }
   if (p.startsWith("/api/chat/") || p === "/api/badges" || p.startsWith("/api/files/")) { event.respondWith(networkFirst(req, DATA)); return; }
 });
 
