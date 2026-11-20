@@ -47,9 +47,10 @@ export function HqImport({ prominent }: { prominent: boolean }) {
           : "focus-ring inline-flex h-10 items-center gap-1.5 rounded-full px-2 text-[13px] font-semibold text-hq-muted hover:text-hq-ink"}>
         <Upload className="h-4 w-4" aria-hidden />Import from old HQ
       </button>
-      <Dialog open={open} onClose={() => setOpen(false)} title="Import from old HQ" description="Pick the courage-hq-export.json file. Importing it again just updates what's here, so nothing doubles up.">
+      <Dialog open={open} onClose={() => setOpen(false)} title="Import from old HQ" description="Paste the HQ data you copied, or pick the export file. Importing again just updates what's here, so nothing doubles up.">
         <ActionForm action={importHqAction} onSuccess={() => setOpen(false)} className="space-y-4">
-          <Field label="Export file" htmlFor="hq-import-file" required><Input id="hq-import-file" name="file" type="file" accept=".json,application/json" required /></Field>
+          <Field label="Paste HQ data" htmlFor="hq-import-paste"><Textarea id="hq-import-paste" name="json" rows={4} placeholder="Tap and hold, then Paste" className="font-mono text-xs" /></Field>
+          <Field label="Or pick the export file" htmlFor="hq-import-file"><Input id="hq-import-file" name="file" type="file" accept=".json,application/json" /></Field>
           <div className="flex justify-end"><SubmitButton pendingText="Importing…">Import</SubmitButton></div>
         </ActionForm>
       </Dialog>

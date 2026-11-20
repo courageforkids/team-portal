@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { writeFileSync, mkdtempSync } from "node:fs";
+import { writeFileSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { as, sql, toast } from "./helpers";
@@ -21,9 +21,10 @@ test("Courage HQ: import, add, check off, private to its owner", async ({ browse
     { externalId: "gf1", kind: "gift", title: "Minky Couture", subtitle: "50 blankets", category: "In-kind", amount: 900, date: "2026-05-06", done: true },
     { externalId: "c1", kind: "contact", title: "WSPA 7News", category: "Media", date: "2030-01-02", nextStep: "Send pitch" },
   ] }));
-  for (const msg of ["Imported 4 new.", "Imported 0 new and updated 4."]) {
+  for (const [i, msg] of ["Imported 4 new.", "Imported 0 new and updated 4."].entries()) {
     await p.getByRole("button", { name: "Import from old HQ" }).click();
-    await p.setInputFiles("#hq-import-file", file);
+    if (i === 0) await p.setInputFiles("#hq-import-file", file);
+    else await p.fill("#hq-import-paste", readFileSync(file, "utf8")); // pasted text works too
     await p.getByRole("button", { name: "Import", exact: true }).click();
     await toast(p, msg);
   }

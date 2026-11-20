@@ -62,12 +62,13 @@ export async function importHqAction(_: unknown, fd: FormData): Promise<ActionRe
   return safe(async () => {
     const me = await actionAdmin();
     const file = fd.get("file");
-    let text = str(fd, "json");
+    let text = String(fd.get("json") ?? "").trim();
+    if (text.length > 2_000_000) throw new UserError("That's too much text for an HQ export.");
     if (file && typeof file === "object" && "size" in file && file.size > 0) {
       if (file.size > 2_000_000) throw new UserError("That file is too big for an HQ export.");
       text = await file.text();
     }
-    if (!text) throw new UserError("Choose the export file.");
+    if (!text) throw new UserError("Paste the HQ data or pick the export file.");
     let parsed: unknown;
     try { parsed = JSON.parse(text); } catch { throw new UserError("That file isn't an HQ export."); }
     const items = Array.isArray(parsed) ? parsed : (parsed as { items?: unknown }).items;
